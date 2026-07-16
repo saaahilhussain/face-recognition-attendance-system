@@ -1,6 +1,7 @@
 import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
+import attendanceRoutes from './routes/attendance.routes.js'
 import authRoutes from './routes/auth.routes.js'
 import databaseRoutes from './routes/database.routes.js'
 import employeeRoutes from './routes/employee.routes.js'
@@ -24,6 +25,7 @@ app.use('/health', healthRoutes)
 app.use('/database', databaseRoutes)
 app.use('/employees', employeeRoutes)
 app.use('/recognition', recognitionRoutes)
+app.use('/attendance', attendanceRoutes)
 
 app.use((req, res) => {
   res.status(404).json({

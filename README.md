@@ -7,7 +7,7 @@ The system is organized as a monorepo with a React frontend, Node.js backend, Mo
 ## Services
 
 - `frontend/`: Vite React app with React Router, Tailwind CSS, shadcn/ui configuration, Axios, and Socket.IO client helpers.
-- `backend/`: Express API with MVC-style folders, MongoDB connection config, JWT authentication, employee APIs, recognition proxy routes, and Socket.IO bootstrap.
+- `backend/`: Express API with MVC-style folders, MongoDB connection config, JWT authentication, employee APIs, attendance marking, recognition proxy routes, and Socket.IO bootstrap.
 - `ai-service/`: FastAPI service with health, webcam status, face detection, and recognition endpoints.
 
 ## Prerequisites
@@ -101,6 +101,10 @@ Backend:
 - `GET /recognition/status`
 - `POST /recognition/detect`
 - `POST /recognition/recognize`
+- `GET /attendance`
+- `GET /attendance/summary`
+- `POST /attendance/mark`
+- `POST /attendance/manual-mark`
 - Env: `PORT`, `MONGO_URI`, `CLIENT_URL`, `JWT_SECRET`, `AI_SERVICE_URL`
 
 AI service:
@@ -184,9 +188,28 @@ AI recognition support includes:
 
 Runtime note: model execution requires Python, OpenCV, InsightFace, ONNX Runtime, NumPy, and a valid image or camera source. The endpoints return dependency errors when the AI runtime is not installed.
 
+## Attendance
+
+Attendance support includes:
+
+- Recognition-driven attendance marking through `POST /attendance/mark`
+- Manual test marking through `POST /attendance/manual-mark`
+- Automatic punch-in when no attendance exists for the employee today
+- Automatic punch-out when punch-in exists and punch-out is missing
+- Duplicate recognition prevention using `ATTENDANCE_PUNCH_OUT_COOLDOWN_MINUTES`
+- Working minutes calculation on punch-out
+- Daily summary counts for total, present, absent, completed, and pending punch-out
+- Real-time `attendance:marked` Socket.IO event after punch-in or punch-out
+- Frontend attendance summary, log view, and manual test mark screen
+
+Attendance routes require:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
 ## Remaining Work
 
-- Attendance marking logic
 - Real webcam capture flow in the frontend
 - Dashboard workflows
 - Camera management UI

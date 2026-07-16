@@ -1,4 +1,5 @@
 import { Server } from 'socket.io'
+import { setSocketServer } from './emitter.js'
 
 export function configureSocket(httpServer) {
   const io = new Server(httpServer, {
@@ -7,6 +8,8 @@ export function configureSocket(httpServer) {
       credentials: true,
     },
   })
+
+  setSocketServer(io)
 
   io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id}`)

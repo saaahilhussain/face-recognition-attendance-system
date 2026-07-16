@@ -3,6 +3,7 @@ import {
   Camera,
   Lock,
   LogOut,
+  ClipboardCheck,
   Search,
   Server,
   UserPlus,
@@ -18,6 +19,11 @@ import {
   logoutAdmin,
   registerAdmin,
 } from '@/lib/auth'
+import {
+  getAttendanceSummary,
+  listAttendance,
+  manualMarkAttendance,
+} from '@/lib/attendance'
 import { createEmployee, listEmployees } from '@/lib/employees'
 
 const statusItems = [
@@ -90,6 +96,12 @@ function HomePage() {
             <Link to="/employees">
               <Users className="h-4 w-4" aria-hidden="true" />
               Employees
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/attendance">
+              <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+              Attendance
             </Link>
           </Button>
           <Button asChild variant="outline">
@@ -421,6 +433,137 @@ function EmployeesPage() {
   )
 }
 
+function AttendancePage() {
+  const [items, setItems] = useState([])
+  const [summary, setSummary] = useState(null)
+  const [employeeId, setEmployeeId] = useState('')
+  const [status, setStatus] = useState('')
+
+  async function loadAttendance() {
+    setStatus('Loading attendance...')
+
+    try {
+      const [logs, summaryResult] = await Promise.all([
+        listAttendance(),
+        getAttendanceSummary(),
+      ])
+      setItems(logs.items)
+      setSummary(summaryResult.summary)
+      setStatus('')
+    } catch (error) {
+      setStatus(error.response?.data?.message || 'Login required to view attendance')
+    }
+  }
+
+  useEffect(() => {
+    loadAttendance()
+  }, [])
+
+  async function handleManualMark(event) {
+    event.preventDefault()
+
+    try {
+      const result = await manualMarkAttendance({ employeeId })
+      setStatus(result.message)
+      setEmployeeId('')
+      await loadAttendance()
+    } catch (error) {
+      setStatus(error.response?.data?.message || 'Attendance mark failed')
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-950">
+      <section className="mx-auto max-w-6xl">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <Link className="text-sm font-medium text-emerald-700" to="/">
+              Back
+            </Link>
+            <h1 className="mt-4 text-3xl font-semibold">Attendance</h1>
+          </div>
+          <Button onClick={loadAttendance} variant="outline">
+            Refresh
+          </Button>
+        </div>
+
+        {summary && (
+          <div className="mt-6 grid gap-4 md:grid-cols-4">
+            {[
+              ['Total', summary.totalEmployees],
+              ['Present', summary.present],
+              ['Absent', summary.absent],
+              ['Pending Out', summary.pendingPunchOut],
+            ].map(([label, value]) => (
+              <div
+                className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                key={label}
+              >
+                <p className="text-sm text-slate-600">{label}</p>
+                <p className="mt-2 text-3xl font-semibold">{value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[380px_1fr]">
+          <form
+            className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+            onSubmit={handleManualMark}
+          >
+            <h2 className="text-lg font-semibold">Manual Test Mark</h2>
+            <label className="mt-4 block">
+              <span className="text-sm font-medium text-slate-700">Employee ID</span>
+              <input
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                onChange={(event) => setEmployeeId(event.target.value)}
+                required
+                type="text"
+                value={employeeId}
+              />
+            </label>
+            <Button className="mt-5 w-full" type="submit">
+              Mark Punch
+            </Button>
+            {status && <p className="mt-4 text-sm text-slate-600">{status}</p>}
+          </form>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-semibold">Recent Logs</h2>
+            <div className="mt-4 divide-y divide-slate-200">
+              {items.map((item) => (
+                <div
+                  className="flex flex-col gap-2 py-4 md:flex-row md:items-center md:justify-between"
+                  key={item._id}
+                >
+                  <div>
+                    <p className="font-medium">
+                      {item.employee?.fullName || item.employee}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      In: {item.punchIn ? new Date(item.punchIn).toLocaleString() : '-'}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Out:{' '}
+                      {item.punchOut ? new Date(item.punchOut).toLocaleString() : '-'}
+                    </p>
+                  </div>
+                  <span className="text-sm capitalize text-slate-600">
+                    {item.status}
+                  </span>
+                </div>
+              ))}
+              {!status && items.length === 0 && (
+                <p className="py-6 text-sm text-slate-600">No attendance logs found.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  )
+}
+
 function HealthPage() {
   return (
     <main className="min-h-screen bg-white px-6 py-10 text-slate-950">
@@ -455,6 +598,7 @@ export default function App() {
       <Route element={<AuthForm mode="register" />} path="/register" />
       <Route element={<SessionPage />} path="/session" />
       <Route element={<EmployeesPage />} path="/employees" />
+      <Route element={<AttendancePage />} path="/attendance" />
       <Route element={<HealthPage />} path="/health" />
     </Routes>
   )
