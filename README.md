@@ -2,19 +2,19 @@
 
 Enterprise-style face recognition attendance management system for the IOCL AOD Information Systems internship project.
 
-This repository is currently through Phase 4: monorepo scaffolding, environment examples, health checks, REST/WebSocket wiring, starter AI-service structure, MongoDB schema design, admin authentication, and employee management APIs.
+The system is organized as a monorepo with a React frontend, Node.js backend, MongoDB database, and Python FastAPI AI service for face detection and recognition.
 
 ## Services
 
 - `frontend/`: Vite React app with React Router, Tailwind CSS, shadcn/ui configuration, Axios, and Socket.IO client helpers.
-- `backend/`: Express API with MVC-style folders, MongoDB connection config, health endpoint, and Socket.IO server bootstrap.
-- `ai-service/`: FastAPI scaffold with health, webcam-status, and face-detection placeholder endpoints.
+- `backend/`: Express API with MVC-style folders, MongoDB connection config, JWT authentication, employee APIs, recognition proxy routes, and Socket.IO bootstrap.
+- `ai-service/`: FastAPI service with health, webcam status, face detection, and recognition endpoints.
 
 ## Prerequisites
 
 - Node.js and npm
 - Local MongoDB on `mongodb://127.0.0.1:27017/face_attendance`
-- Python for the AI service. If `python --version` is not callable in the shell, install/fix Python before running the AI service.
+- Python for the AI service. If `python --version` is not callable in the shell, install or fix Python before running the AI service.
 
 ## Environment Setup
 
@@ -56,7 +56,7 @@ Health check:
 Invoke-WebRequest http://localhost:5000/health
 ```
 
-MongoDB is allowed to be offline during Phase 1. The backend starts and reports the database state in `/health`.
+MongoDB can be offline during local scaffolding checks. The backend starts and reports the database state in `/health`.
 
 ## Run AI Service
 
@@ -76,6 +76,12 @@ Health check:
 Invoke-WebRequest http://localhost:8000/health
 ```
 
+Recognition status:
+
+```powershell
+Invoke-WebRequest http://localhost:8000/recognition/status
+```
+
 ## Public Interfaces
 
 Backend:
@@ -92,6 +98,9 @@ Backend:
 - `PATCH /employees/:id`
 - `DELETE /employees/:id`
 - `POST /employees/:id/face-registration`
+- `GET /recognition/status`
+- `POST /recognition/detect`
+- `POST /recognition/recognize`
 - Env: `PORT`, `MONGO_URI`, `CLIENT_URL`, `JWT_SECRET`, `AI_SERVICE_URL`
 
 AI service:
@@ -99,49 +108,36 @@ AI service:
 - `GET /health`
 - `GET /vision/webcam`
 - `GET /vision/face-detection`
+- `GET /recognition/status`
+- `POST /recognition/detect`
+- `POST /recognition/recognize`
 - Env: `PORT`, `BACKEND_URL`, `CAMERA_INDEX`
 
 Frontend:
 
 - Env: `VITE_API_URL`, `VITE_SOCKET_URL`
 
-## Phase 1 Scope
+## Data Models
 
-Implemented:
-
-- Project scaffolds and service folder structure
-- Backend health endpoint and Socket.IO initialization
-- Frontend routing shell and API/socket helpers
-- AI FastAPI placeholder structure
-- Environment examples and development instructions
-
-Not implemented yet:
-
-- Attendance logic
-- Real webcam capture and face recognition runtime verification
-- Dashboard workflows
-
-## Phase 2 Scope
-
-Implemented MongoDB collections:
+MongoDB collections:
 
 - `Employee`: basic employee information, face embedding, registered images, and attendance references
 - `Attendance`: employee reference, date, punch-in, punch-out, working minutes, status, confidence, and camera reference
 - `Camera`: camera name, location, source, status, and last-seen tracking
 - `Admin`: admin identity, password hash, role, status, and last-login tracking
 
-Schema metadata is available at:
+Schema metadata:
 
 ```powershell
 Invoke-WebRequest http://localhost:5000/database/schema
 ```
 
-## Phase 3 Scope
+## Authentication
 
-Implemented admin authentication:
+Admin authentication includes:
 
-- Admin registration with bcrypt password hashing
-- Admin login with JWT issue
+- Registration with bcrypt password hashing
+- Login with JWT issue
 - Protected session validation through `GET /auth/me`
 - Stateless logout response through `POST /auth/logout`
 - Bearer-token middleware for protected backend routes
@@ -156,20 +152,42 @@ Invoke-WebRequest http://localhost:5000/auth/login `
   -Body '{"email":"admin@example.com","password":"password123"}'
 ```
 
-## Phase 4 Scope
+Protected backend routes require:
 
-Implemented employee management:
+```text
+Authorization: Bearer <jwt-token>
+```
+
+## Employee Management
+
+Employee management includes:
 
 - Create employee
 - Edit employee
 - Delete employee
 - Search and filter employees
 - Employee detail endpoint
-- Placeholder face-registration endpoint for front, left, right, and other image references plus future embedding data
+- Face-registration placeholder endpoint for image references and future embedding data
 - Frontend employee registration and listing screen
 
-Employee routes require:
+## Face Recognition
 
-```text
-Authorization: Bearer <jwt-token>
-```
+AI recognition support includes:
+
+- OpenCV webcam status check
+- InsightFace dependency status check
+- Base64 image face detection endpoint
+- Base64 image recognition endpoint using cosine similarity against known embeddings
+- Unknown-face handling when confidence is below threshold
+- Backend protected proxy routes for recognition status, detection, and recognition
+- Backend recognition using active employees with stored face embeddings as known faces
+
+Runtime note: model execution requires Python, OpenCV, InsightFace, ONNX Runtime, NumPy, and a valid image or camera source. The endpoints return dependency errors when the AI runtime is not installed.
+
+## Remaining Work
+
+- Attendance marking logic
+- Real webcam capture flow in the frontend
+- Dashboard workflows
+- Camera management UI
+- Reports and exports

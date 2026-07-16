@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.routes.js'
 import databaseRoutes from './routes/database.routes.js'
 import employeeRoutes from './routes/employee.routes.js'
 import healthRoutes from './routes/health.routes.js'
+import recognitionRoutes from './routes/recognition.routes.js'
 
 dotenv.config()
 
@@ -22,6 +23,7 @@ app.use('/auth', authRoutes)
 app.use('/health', healthRoutes)
 app.use('/database', databaseRoutes)
 app.use('/employees', employeeRoutes)
+app.use('/recognition', recognitionRoutes)
 
 app.use((req, res) => {
   res.status(404).json({

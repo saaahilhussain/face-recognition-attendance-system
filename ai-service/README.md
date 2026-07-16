@@ -16,3 +16,11 @@ Health check:
 ```powershell
 Invoke-WebRequest http://localhost:8000/health
 ```
+
+Recognition status:
+
+```powershell
+Invoke-WebRequest http://localhost:8000/recognition/status
+```
+
+Face detection and recognition accept base64 image payloads. Runtime model execution requires OpenCV, InsightFace, ONNX Runtime, and NumPy from `requirements.txt`.
