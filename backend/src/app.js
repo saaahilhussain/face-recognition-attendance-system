@@ -1,6 +1,7 @@
 import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
+import databaseRoutes from './routes/database.routes.js'
 import healthRoutes from './routes/health.routes.js'
 
 dotenv.config()
@@ -16,6 +17,7 @@ app.use(
 app.use(express.json())
 
 app.use('/health', healthRoutes)
+app.use('/database', databaseRoutes)
 
 app.use((req, res) => {
   res.status(404).json({

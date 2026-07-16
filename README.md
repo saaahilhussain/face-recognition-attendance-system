@@ -2,7 +2,7 @@
 
 Enterprise-style face recognition attendance management system for the IOCL AOD Information Systems internship project.
 
-This repository is currently at Phase 1: monorepo scaffolding, environment examples, health checks, REST/WebSocket wiring, and starter AI-service structure.
+This repository is currently through Phase 2: monorepo scaffolding, environment examples, health checks, REST/WebSocket wiring, starter AI-service structure, and MongoDB schema design.
 
 ## Services
 
@@ -81,6 +81,7 @@ Invoke-WebRequest http://localhost:8000/health
 Backend:
 
 - `GET /health`
+- `GET /database/schema`
 - Env: `PORT`, `MONGO_URI`, `CLIENT_URL`, `JWT_SECRET`, `AI_SERVICE_URL`
 
 AI service:
@@ -111,3 +112,18 @@ Not implemented yet:
 - Attendance logic
 - Real webcam capture and face recognition runtime verification
 - Dashboard workflows
+
+## Phase 2 Scope
+
+Implemented MongoDB collections:
+
+- `Employee`: basic employee information, face embedding, registered images, and attendance references
+- `Attendance`: employee reference, date, punch-in, punch-out, working minutes, status, confidence, and camera reference
+- `Camera`: camera name, location, source, status, and last-seen tracking
+- `Admin`: admin identity, password hash, role, status, and last-login tracking
+
+Schema metadata is available at:
+
+```powershell
+Invoke-WebRequest http://localhost:5000/database/schema
+```
