@@ -103,6 +103,8 @@ Backend:
 - `POST /recognition/recognize`
 - `GET /attendance`
 - `GET /attendance/summary`
+- `GET /attendance/monthly-report`
+- `GET /attendance/employees/:employeeId/history`
 - `POST /attendance/mark`
 - `POST /attendance/manual-mark`
 - `GET /cameras`
@@ -112,6 +114,10 @@ Backend:
 - `PATCH /cameras/:id/status`
 - `DELETE /cameras/:id`
 - `GET /dashboard/overview`
+- `GET /realtime/status`
+- `GET /reports/daily`
+- `GET /reports/monthly`
+- `GET /reports/employees/:employeeId`
 - Env: `PORT`, `MONGO_URI`, `CLIENT_URL`, `JWT_SECRET`, `AI_SERVICE_URL`
 
 AI service:
@@ -201,13 +207,16 @@ Attendance support includes:
 
 - Recognition-driven attendance marking through `POST /attendance/mark`
 - Manual test marking through `POST /attendance/manual-mark`
+- Daily attendance log filtering by date, date range, status, department, and employee
+- Employee attendance history by date range
+- Monthly attendance summary with present days, absent days, completed days, pending punch-outs, and working hours
 - Automatic punch-in when no attendance exists for the employee today
 - Automatic punch-out when punch-in exists and punch-out is missing
 - Duplicate recognition prevention using `ATTENDANCE_PUNCH_OUT_COOLDOWN_MINUTES`
 - Working minutes calculation on punch-out
 - Daily summary counts for total, present, absent, completed, and pending punch-out
 - Real-time `attendance:marked` Socket.IO event after punch-in or punch-out
-- Frontend attendance summary, log view, and manual test mark screen
+- Frontend attendance summary, filtered log view, history lookup, monthly report, and manual test mark screen
 
 Attendance routes require:
 
@@ -250,7 +259,89 @@ Dashboard routes require:
 Authorization: Bearer <jwt-token>
 ```
 
+## Real-Time Communication
+
+Socket.IO events:
+
+- `camera:connected`
+- `camera:disconnected`
+- `recognition:started`
+- `recognition:success`
+- `recognition:failed`
+- `attendance:marked`
+- `employee:registered`
+- `employee:face_registered`
+
+Real-time support includes:
+
+- Socket server status at `GET /realtime/status`
+- Connected client count tracking
+- Last emitted event metadata
+- Dashboard live feed subscriptions for attendance, camera, recognition, and employee events
+
+Realtime status routes require:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
+## Reports
+
+Reports include:
+
+- Daily attendance report
+- Monthly attendance summary report
+- Employee attendance history report
+- Export formats: `json`, `csv`, `excel`, and `pdf`
+- Frontend reports screen at `/reports`
+
+Example:
+
+```powershell
+Invoke-WebRequest "http://localhost:5000/reports/daily?date=2026-07-17&format=csv"
+```
+
+Report routes require:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
+## UI Polish
+
+Frontend polish includes:
+
+- Toast notifications for success and failure feedback
+- Shared loading, status, and empty-state treatments
+- Confirmation dialogs for logout and disabling cameras
+- Dedicated 404 page for unknown routes
+- Responsive layouts across dashboard, attendance, camera, and report screens
+
+## Testing
+
+Backend tests use Node's built-in test runner:
+
+```powershell
+cd backend
+npm.cmd test
+```
+
+Current coverage includes:
+
+- Health and schema metadata routes
+- Unknown route handling
+- Protected route authentication checks
+- Auth payload validation
+- Report renderer output for JSON, CSV, Excel-compatible HTML, and PDF
+
+Frontend checks:
+
+```powershell
+cd frontend
+npm.cmd run build
+npm.cmd run lint
+```
+
 ## Remaining Work
 
 - Real webcam capture flow in the frontend
-- Reports and exports

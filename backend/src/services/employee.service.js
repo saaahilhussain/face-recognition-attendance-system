@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 import { Employee } from '../models/employee.model.js'
+import { emitSocketEvent } from '../socket/emitter.js'
 
 function toEmployeeFilter(query) {
   const filter = {}
@@ -65,7 +66,18 @@ export async function createEmployee(payload) {
     throw error
   }
 
-  return Employee.create(payload)
+  const employee = await Employee.create(payload)
+
+  emitSocketEvent('employee:registered', {
+    employee: {
+      id: employee._id,
+      employeeCode: employee.employeeCode,
+      fullName: employee.fullName,
+      department: employee.department,
+    },
+  })
+
+  return employee
 }
 
 export async function getEmployeeById(id) {
@@ -125,5 +137,16 @@ export async function saveFaceRegistration(id, payload) {
   }
 
   await employee.save()
+
+  emitSocketEvent('employee:face_registered', {
+    employee: {
+      id: employee._id,
+      employeeCode: employee.employeeCode,
+      fullName: employee.fullName,
+    },
+    registeredImages: employee.registeredImages.length,
+    hasEmbedding: employee.faceEmbedding.length > 0,
+  })
+
   return employee
 }

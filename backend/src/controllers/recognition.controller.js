@@ -3,6 +3,7 @@ import {
   getAiRecognitionStatus,
   recognizeFaces,
 } from '../services/ai.service.js'
+import { emitSocketEvent } from '../socket/emitter.js'
 
 function validateImagePayload(payload) {
   if (!payload.imageBase64 || typeof payload.imageBase64 !== 'string') {
@@ -42,13 +43,26 @@ export async function detect(req, res) {
       return res.status(400).json({ status: 'failed', errors })
     }
 
+    emitSocketEvent('recognition:started', {
+      mode: 'detect',
+    })
+
     const result = await detectFaces(req.body.imageBase64)
+
+    emitSocketEvent('recognition:success', {
+      mode: 'detect',
+      facesDetected: result.faces_detected || result.detections?.length || 0,
+    })
 
     return res.json({
       status: 'ok',
       result,
     })
   } catch (error) {
+    emitSocketEvent('recognition:failed', {
+      mode: 'detect',
+      message: error.message,
+    })
     return handleRecognitionError(error, res)
   }
 }
@@ -61,13 +75,28 @@ export async function recognize(req, res) {
       return res.status(400).json({ status: 'failed', errors })
     }
 
+    emitSocketEvent('recognition:started', {
+      mode: 'recognize',
+    })
+
     const result = await recognizeFaces(req.body.imageBase64, req.body.threshold)
+
+    emitSocketEvent('recognition:success', {
+      mode: 'recognize',
+      facesDetected: result.faces_detected || 0,
+      matches: result.matches?.length || 0,
+      recognized: result.matches?.filter((match) => match.status === 'recognized').length || 0,
+    })
 
     return res.json({
       status: 'ok',
       result,
     })
   } catch (error) {
+    emitSocketEvent('recognition:failed', {
+      mode: 'recognize',
+      message: error.message,
+    })
     return handleRecognitionError(error, res)
   }
 }

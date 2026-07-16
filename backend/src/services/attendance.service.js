@@ -70,6 +70,16 @@ export async function listAttendance(query) {
       $gte: startOfDay(query.date),
       $lte: endOfDay(query.date),
     }
+  } else if (query.from || query.to) {
+    filter.date = {}
+
+    if (query.from) {
+      filter.date.$gte = startOfDay(query.from)
+    }
+
+    if (query.to) {
+      filter.date.$lte = endOfDay(query.to)
+    }
   }
 
   if (query.employeeId) {
@@ -79,6 +89,13 @@ export async function listAttendance(query) {
 
   if (query.status) {
     filter.status = query.status
+  }
+
+  if (query.department) {
+    const employees = await Employee.find({
+      department: new RegExp(query.department, 'i'),
+    }).select('_id')
+    filter.employee = { $in: employees.map((employee) => employee._id) }
   }
 
   const page = Math.max(Number(query.page) || 1, 1)
@@ -102,6 +119,105 @@ export async function listAttendance(query) {
       limit,
       total,
       pages: Math.ceil(total / limit),
+    },
+  }
+}
+
+export async function getEmployeeAttendanceHistory(employeeId, query) {
+  assertObjectId(employeeId, 'employee id')
+
+  return listAttendance({
+    ...query,
+    employeeId,
+  })
+}
+
+export async function getMonthlyAttendanceReport(query) {
+  const year = Number(query.year) || new Date().getFullYear()
+  const month = Number(query.month) || new Date().getMonth() + 1
+  const start = new Date(year, month - 1, 1)
+  const end = new Date(year, month, 0, 23, 59, 59, 999)
+
+  const employees = await Employee.find({ status: 'active' })
+    .select('employeeCode fullName department designation')
+    .sort({ fullName: 1 })
+
+  const attendanceRecords = await Attendance.find({
+    date: {
+      $gte: start,
+      $lte: end,
+    },
+  }).select('employee date punchIn punchOut workingHoursMinutes status')
+
+  const attendanceByEmployee = new Map()
+
+  for (const record of attendanceRecords) {
+    const employeeId = record.employee.toString()
+    const current = attendanceByEmployee.get(employeeId) || {
+      presentDays: 0,
+      completedDays: 0,
+      pendingPunchOutDays: 0,
+      totalWorkingMinutes: 0,
+      records: [],
+    }
+
+    if (record.punchIn) {
+      current.presentDays += 1
+    }
+
+    if (record.punchOut) {
+      current.completedDays += 1
+    }
+
+    if (record.punchIn && !record.punchOut) {
+      current.pendingPunchOutDays += 1
+    }
+
+    current.totalWorkingMinutes += record.workingHoursMinutes || 0
+    current.records.push(record)
+    attendanceByEmployee.set(employeeId, current)
+  }
+
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const rows = employees.map((employee) => {
+    const summary = attendanceByEmployee.get(employee._id.toString()) || {
+      presentDays: 0,
+      completedDays: 0,
+      pendingPunchOutDays: 0,
+      totalWorkingMinutes: 0,
+      records: [],
+    }
+
+    return {
+      employee: {
+        id: employee._id,
+        employeeCode: employee.employeeCode,
+        fullName: employee.fullName,
+        department: employee.department,
+        designation: employee.designation,
+      },
+      presentDays: summary.presentDays,
+      absentDays: Math.max(daysInMonth - summary.presentDays, 0),
+      completedDays: summary.completedDays,
+      pendingPunchOutDays: summary.pendingPunchOutDays,
+      totalWorkingMinutes: summary.totalWorkingMinutes,
+      totalWorkingHours: Number((summary.totalWorkingMinutes / 60).toFixed(2)),
+    }
+  })
+
+  return {
+    year,
+    month,
+    daysInMonth,
+    rows,
+    totals: {
+      employees: rows.length,
+      presentDays: rows.reduce((total, row) => total + row.presentDays, 0),
+      absentDays: rows.reduce((total, row) => total + row.absentDays, 0),
+      workingMinutes: rows.reduce(
+        (total, row) => total + row.totalWorkingMinutes,
+        0,
+      ),
     },
   }
 }
@@ -219,10 +335,33 @@ export async function recognizeAndMarkAttendance({
   threshold,
   cameraId = null,
 }) {
-  const recognition = await recognizeFaces(imageBase64, threshold)
+  emitSocketEvent('recognition:started', {
+    mode: 'attendance',
+    cameraId,
+  })
+
+  let recognition
+
+  try {
+    recognition = await recognizeFaces(imageBase64, threshold)
+  } catch (error) {
+    emitSocketEvent('recognition:failed', {
+      mode: 'attendance',
+      cameraId,
+      message: error.message,
+    })
+    throw error
+  }
+
   const match = recognition.matches?.find((item) => item.status === 'recognized')
 
   if (!match?.employee_id) {
+    emitSocketEvent('recognition:failed', {
+      mode: 'attendance',
+      cameraId,
+      message: 'No registered employee recognized',
+    })
+
     return {
       action: 'unknown',
       message: 'No registered employee recognized',
@@ -236,6 +375,14 @@ export async function recognizeAndMarkAttendance({
     confidence: match.confidence,
     cameraId,
     source: 'recognition',
+  })
+
+  emitSocketEvent('recognition:success', {
+    mode: 'attendance',
+    cameraId,
+    employeeId: match.employee_id,
+    confidence: match.confidence,
+    action: result.action,
   })
 
   return {

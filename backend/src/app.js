@@ -8,7 +8,9 @@ import dashboardRoutes from './routes/dashboard.routes.js'
 import databaseRoutes from './routes/database.routes.js'
 import employeeRoutes from './routes/employee.routes.js'
 import healthRoutes from './routes/health.routes.js'
+import realtimeRoutes from './routes/realtime.routes.js'
 import recognitionRoutes from './routes/recognition.routes.js'
+import reportRoutes from './routes/report.routes.js'
 
 dotenv.config()
 
@@ -30,6 +32,8 @@ app.use('/recognition', recognitionRoutes)
 app.use('/attendance', attendanceRoutes)
 app.use('/cameras', cameraRoutes)
 app.use('/dashboard', dashboardRoutes)
+app.use('/realtime', realtimeRoutes)
+app.use('/reports', reportRoutes)
 
 app.use((req, res) => {
   res.status(404).json({

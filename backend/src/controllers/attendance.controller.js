@@ -1,4 +1,6 @@
 import {
+  getEmployeeAttendanceHistory,
+  getMonthlyAttendanceReport,
   getTodayAttendanceSummary,
   listAttendance,
   markAttendanceForEmployee,
@@ -42,6 +44,32 @@ export async function summary(req, res) {
     res.json({
       status: 'ok',
       summary: result,
+    })
+  } catch (error) {
+    handleAttendanceError(error, res)
+  }
+}
+
+export async function history(req, res) {
+  try {
+    const result = await getEmployeeAttendanceHistory(req.params.employeeId, req.query)
+
+    res.json({
+      status: 'ok',
+      ...result,
+    })
+  } catch (error) {
+    handleAttendanceError(error, res)
+  }
+}
+
+export async function monthlyReport(req, res) {
+  try {
+    const report = await getMonthlyAttendanceReport(req.query)
+
+    res.json({
+      status: 'ok',
+      report,
     })
   } catch (error) {
     handleAttendanceError(error, res)

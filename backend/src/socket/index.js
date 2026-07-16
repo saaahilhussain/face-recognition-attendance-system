@@ -1,5 +1,5 @@
 import { Server } from 'socket.io'
-import { setSocketServer } from './emitter.js'
+import { setConnectedClientCount, setSocketServer } from './emitter.js'
 
 export function configureSocket(httpServer) {
   const io = new Server(httpServer, {
@@ -12,6 +12,7 @@ export function configureSocket(httpServer) {
   setSocketServer(io)
 
   io.on('connection', (socket) => {
+    setConnectedClientCount(io.engine.clientsCount)
     console.log(`Socket connected: ${socket.id}`)
 
     socket.emit('system:ready', {
@@ -20,6 +21,7 @@ export function configureSocket(httpServer) {
     })
 
     socket.on('disconnect', (reason) => {
+      setConnectedClientCount(io.engine.clientsCount)
       console.log(`Socket disconnected: ${socket.id} (${reason})`)
     })
   })

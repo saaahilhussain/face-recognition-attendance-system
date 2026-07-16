@@ -10,6 +10,18 @@ export async function getAttendanceSummary(params = {}) {
   return response.data
 }
 
+export async function getEmployeeAttendanceHistory(employeeId, params = {}) {
+  const response = await api.get(`/attendance/employees/${employeeId}/history`, {
+    params,
+  })
+  return response.data
+}
+
+export async function getMonthlyAttendanceReport(params = {}) {
+  const response = await api.get('/attendance/monthly-report', { params })
+  return response.data
+}
+
 export async function markAttendance(payload) {
   const response = await api.post('/attendance/mark', payload)
   return response.data
