@@ -1,6 +1,24 @@
-import { Activity, Camera, Server } from 'lucide-react'
-import { Link, Route, Routes } from 'react-router-dom'
+import {
+  Activity,
+  Camera,
+  Lock,
+  LogOut,
+  Search,
+  Server,
+  UserPlus,
+  Users,
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link, Route, Routes, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import {
+  clearAuthToken,
+  getSession,
+  loginAdmin,
+  logoutAdmin,
+  registerAdmin,
+} from '@/lib/auth'
+import { createEmployee, listEmployees } from '@/lib/employees'
 
 const statusItems = [
   {
@@ -26,14 +44,14 @@ function HomePage() {
       <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center px-6 py-10">
         <div className="mb-8">
           <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-            Phase 1 Foundation
+            Phase 3 Authentication
           </p>
           <h1 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight md:text-5xl">
             Face Recognition Attendance System
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-            React, Express, Socket.IO, MongoDB, and FastAPI scaffolds are ready for
-            the next implementation phase.
+            Admin registration, login, JWT session validation, and protected
+            backend routes are ready for the next implementation phase.
           </p>
         </div>
 
@@ -57,12 +75,347 @@ function HomePage() {
 
         <nav className="mt-8 flex flex-wrap gap-3">
           <Button asChild>
-            <Link to="/health">View Setup Status</Link>
+            <Link to="/login">
+              <Lock className="h-4 w-4" aria-hidden="true" />
+              Admin Login
+            </Link>
           </Button>
           <Button asChild variant="outline">
-            <a href="/">Dashboard Shell</a>
+            <Link to="/register">
+              <UserPlus className="h-4 w-4" aria-hidden="true" />
+              Register Admin
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/employees">
+              <Users className="h-4 w-4" aria-hidden="true" />
+              Employees
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/health">Setup Status</Link>
           </Button>
         </nav>
+      </section>
+    </main>
+  )
+}
+
+function AuthForm({ mode }) {
+  const navigate = useNavigate()
+  const isRegister = mode === 'register'
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+  })
+  const [status, setStatus] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  function updateField(event) {
+    setForm((current) => ({
+      ...current,
+      [event.target.name]: event.target.value,
+    }))
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setIsSubmitting(true)
+    setStatus('')
+
+    try {
+      if (isRegister) {
+        await registerAdmin(form)
+      } else {
+        await loginAdmin({
+          email: form.email,
+          password: form.password,
+        })
+      }
+
+      navigate('/session')
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.errors?.join(', ') ||
+        'Authentication request failed'
+      setStatus(message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-950">
+      <section className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md flex-col justify-center">
+        <Link className="mb-8 text-sm font-medium text-emerald-700" to="/">
+          Back
+        </Link>
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <h1 className="text-2xl font-semibold">
+            {isRegister ? 'Register Admin' : 'Admin Login'}
+          </h1>
+          <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+            {isRegister && (
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Name</span>
+                <input
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                  name="name"
+                  onChange={updateField}
+                  required
+                  type="text"
+                  value={form.name}
+                />
+              </label>
+            )}
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Email</span>
+              <input
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                name="email"
+                onChange={updateField}
+                required
+                type="email"
+                value={form.email}
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Password</span>
+              <input
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                minLength={8}
+                name="password"
+                onChange={updateField}
+                required
+                type="password"
+                value={form.password}
+              />
+            </label>
+            {status && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {status}
+              </p>
+            )}
+            <Button className="w-full" disabled={isSubmitting} type="submit">
+              {isSubmitting ? 'Submitting...' : isRegister ? 'Create Admin' : 'Login'}
+            </Button>
+          </form>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function SessionPage() {
+  const navigate = useNavigate()
+  const [session, setSession] = useState(null)
+  const [status, setStatus] = useState('Loading session...')
+
+  useEffect(() => {
+    getSession()
+      .then((data) => {
+        setSession(data.admin)
+        setStatus('')
+      })
+      .catch(() => {
+        clearAuthToken()
+        setStatus('Session expired. Login again.')
+      })
+  }, [])
+
+  async function handleLogout() {
+    await logoutAdmin().catch(() => clearAuthToken())
+    navigate('/login')
+  }
+
+  return (
+    <main className="min-h-screen bg-white px-6 py-10 text-slate-950">
+      <section className="mx-auto max-w-3xl">
+        <Link className="text-sm font-medium text-emerald-700" to="/">
+          Back
+        </Link>
+        <div className="mt-6 rounded-lg border border-slate-200 p-6">
+          <h1 className="text-3xl font-semibold">Protected Session</h1>
+          {status && <p className="mt-4 text-sm text-slate-600">{status}</p>}
+          {session && (
+            <div className="mt-6 space-y-3 text-sm">
+              <p>
+                <span className="font-medium">Name:</span> {session.name}
+              </p>
+              <p>
+                <span className="font-medium">Email:</span> {session.email}
+              </p>
+              <p>
+                <span className="font-medium">Role:</span> {session.role}
+              </p>
+              <Button onClick={handleLogout} variant="outline">
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                Logout
+              </Button>
+            </div>
+          )}
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function EmployeesPage() {
+  const [employees, setEmployees] = useState([])
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [form, setForm] = useState({
+    employeeCode: '',
+    fullName: '',
+    email: '',
+    phone: '',
+    department: '',
+    designation: '',
+  })
+
+  async function loadEmployees(params = {}) {
+    setStatus('Loading employees...')
+
+    try {
+      const data = await listEmployees(params)
+      setEmployees(data.items)
+      setStatus('')
+    } catch (error) {
+      setStatus(error.response?.data?.message || 'Login required to view employees')
+    }
+  }
+
+  useEffect(() => {
+    loadEmployees()
+  }, [])
+
+  function updateField(event) {
+    setForm((current) => ({
+      ...current,
+      [event.target.name]: event.target.value,
+    }))
+  }
+
+  async function handleSearch(event) {
+    event.preventDefault()
+    await loadEmployees({ search })
+  }
+
+  async function handleCreate(event) {
+    event.preventDefault()
+
+    try {
+      await createEmployee(form)
+      setForm({
+        employeeCode: '',
+        fullName: '',
+        email: '',
+        phone: '',
+        department: '',
+        designation: '',
+      })
+      await loadEmployees()
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.errors?.join(', ') ||
+        'Employee creation failed'
+      setStatus(message)
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-950">
+      <section className="mx-auto max-w-6xl">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <Link className="text-sm font-medium text-emerald-700" to="/">
+              Back
+            </Link>
+            <h1 className="mt-4 text-3xl font-semibold">Employees</h1>
+          </div>
+          <Button asChild variant="outline">
+            <Link to="/session">Protected Session</Link>
+          </Button>
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[380px_1fr]">
+          <form
+            className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+            onSubmit={handleCreate}
+          >
+            <h2 className="text-lg font-semibold">Register Employee</h2>
+            <div className="mt-4 grid gap-3">
+              {[
+                ['employeeCode', 'Employee Code'],
+                ['fullName', 'Full Name'],
+                ['email', 'Email'],
+                ['phone', 'Phone'],
+                ['department', 'Department'],
+                ['designation', 'Designation'],
+              ].map(([name, label]) => (
+                <label className="block" key={name}>
+                  <span className="text-sm font-medium text-slate-700">
+                    {label}
+                  </span>
+                  <input
+                    className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                    name={name}
+                    onChange={updateField}
+                    required={['employeeCode', 'fullName', 'department'].includes(name)}
+                    type={name === 'email' ? 'email' : 'text'}
+                    value={form[name]}
+                  />
+                </label>
+              ))}
+            </div>
+            <Button className="mt-5 w-full" type="submit">
+              Create Employee
+            </Button>
+          </form>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <form className="flex gap-2" onSubmit={handleSearch}>
+              <input
+                className="h-10 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by name, code, department, or email"
+                type="search"
+                value={search}
+              />
+              <Button type="submit">
+                <Search className="h-4 w-4" aria-hidden="true" />
+                Search
+              </Button>
+            </form>
+
+            {status && <p className="mt-4 text-sm text-slate-600">{status}</p>}
+
+            <div className="mt-5 divide-y divide-slate-200">
+              {employees.map((employee) => (
+                <div
+                  className="flex flex-col gap-1 py-4 md:flex-row md:items-center md:justify-between"
+                  key={employee._id}
+                >
+                  <div>
+                    <p className="font-medium">{employee.fullName}</p>
+                    <p className="text-sm text-slate-600">
+                      {employee.employeeCode} - {employee.department}
+                    </p>
+                  </div>
+                  <span className="text-sm capitalize text-slate-600">
+                    {employee.status}
+                  </span>
+                </div>
+              ))}
+              {!status && employees.length === 0 && (
+                <p className="py-6 text-sm text-slate-600">No employees found.</p>
+              )}
+            </div>
+          </div>
+        </div>
       </section>
     </main>
   )
@@ -98,6 +451,10 @@ export default function App() {
   return (
     <Routes>
       <Route element={<HomePage />} path="/" />
+      <Route element={<AuthForm mode="login" />} path="/login" />
+      <Route element={<AuthForm mode="register" />} path="/register" />
+      <Route element={<SessionPage />} path="/session" />
+      <Route element={<EmployeesPage />} path="/employees" />
       <Route element={<HealthPage />} path="/health" />
     </Routes>
   )

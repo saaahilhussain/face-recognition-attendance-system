@@ -2,7 +2,7 @@
 
 Enterprise-style face recognition attendance management system for the IOCL AOD Information Systems internship project.
 
-This repository is currently through Phase 2: monorepo scaffolding, environment examples, health checks, REST/WebSocket wiring, starter AI-service structure, and MongoDB schema design.
+This repository is currently through Phase 4: monorepo scaffolding, environment examples, health checks, REST/WebSocket wiring, starter AI-service structure, MongoDB schema design, admin authentication, and employee management APIs.
 
 ## Services
 
@@ -82,6 +82,16 @@ Backend:
 
 - `GET /health`
 - `GET /database/schema`
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
+- `POST /auth/logout`
+- `GET /employees`
+- `POST /employees`
+- `GET /employees/:id`
+- `PATCH /employees/:id`
+- `DELETE /employees/:id`
+- `POST /employees/:id/face-registration`
 - Env: `PORT`, `MONGO_URI`, `CLIENT_URL`, `JWT_SECRET`, `AI_SERVICE_URL`
 
 AI service:
@@ -107,8 +117,6 @@ Implemented:
 
 Not implemented yet:
 
-- Authentication
-- Employee CRUD
 - Attendance logic
 - Real webcam capture and face recognition runtime verification
 - Dashboard workflows
@@ -126,4 +134,42 @@ Schema metadata is available at:
 
 ```powershell
 Invoke-WebRequest http://localhost:5000/database/schema
+```
+
+## Phase 3 Scope
+
+Implemented admin authentication:
+
+- Admin registration with bcrypt password hashing
+- Admin login with JWT issue
+- Protected session validation through `GET /auth/me`
+- Stateless logout response through `POST /auth/logout`
+- Bearer-token middleware for protected backend routes
+- Frontend login, registration, and protected-session screens
+
+Example login:
+
+```powershell
+Invoke-WebRequest http://localhost:5000/auth/login `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{"email":"admin@example.com","password":"password123"}'
+```
+
+## Phase 4 Scope
+
+Implemented employee management:
+
+- Create employee
+- Edit employee
+- Delete employee
+- Search and filter employees
+- Employee detail endpoint
+- Placeholder face-registration endpoint for front, left, right, and other image references plus future embedding data
+- Frontend employee registration and listing screen
+
+Employee routes require:
+
+```text
+Authorization: Bearer <jwt-token>
 ```
