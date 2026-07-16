@@ -1,5 +1,6 @@
 import {
   Activity,
+  BarChart3,
   Camera,
   Lock,
   LogOut,
@@ -29,7 +30,9 @@ import {
   listCameras,
   updateCameraStatus,
 } from '@/lib/cameras'
+import { getDashboardOverview } from '@/lib/dashboard'
 import { createEmployee, listEmployees } from '@/lib/employees'
+import { socket } from '@/lib/socket'
 
 const statusItems = [
   {
@@ -96,6 +99,12 @@ function HomePage() {
             <Link to="/register">
               <UserPlus className="h-4 w-4" aria-hidden="true" />
               Register Admin
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/dashboard">
+              <BarChart3 className="h-4 w-4" aria-hidden="true" />
+              Dashboard
             </Link>
           </Button>
           <Button asChild variant="outline">
@@ -281,6 +290,203 @@ function SessionPage() {
             </div>
           )}
         </div>
+      </section>
+    </main>
+  )
+}
+
+function DashboardPage() {
+  const [dashboard, setDashboard] = useState(null)
+  const [events, setEvents] = useState([])
+  const [status, setStatus] = useState('Loading dashboard...')
+
+  async function loadDashboard() {
+    setStatus('Loading dashboard...')
+
+    try {
+      const data = await getDashboardOverview()
+      setDashboard(data.dashboard)
+      setStatus('')
+    } catch (error) {
+      setStatus(error.response?.data?.message || 'Login required to view dashboard')
+    }
+  }
+
+  useEffect(() => {
+    loadDashboard()
+
+    function addEvent(type, payload) {
+      setEvents((current) =>
+        [
+          {
+            id: `${type}-${Date.now()}`,
+            type,
+            payload,
+            timestamp: payload?.timestamp || new Date().toISOString(),
+          },
+          ...current,
+        ].slice(0, 8),
+      )
+    }
+
+    socket.connect()
+    socket.on('attendance:marked', (payload) => addEvent('attendance:marked', payload))
+    socket.on('camera:connected', (payload) => addEvent('camera:connected', payload))
+    socket.on('camera:disconnected', (payload) =>
+      addEvent('camera:disconnected', payload),
+    )
+
+    return () => {
+      socket.off('attendance:marked')
+      socket.off('camera:connected')
+      socket.off('camera:disconnected')
+      socket.disconnect()
+    }
+  }, [])
+
+  const attendance = dashboard?.attendance
+  const cameras = dashboard?.cameras
+  const attendanceTotal = Math.max(attendance?.totalEmployees || 0, 1)
+  const cameraTotal = Math.max(cameras?.total || 0, 1)
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-950">
+      <section className="mx-auto max-w-7xl">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <Link className="text-sm font-medium text-emerald-700" to="/">
+              Back
+            </Link>
+            <h1 className="mt-4 text-3xl font-semibold">Dashboard</h1>
+          </div>
+          <Button onClick={loadDashboard} variant="outline">
+            Refresh
+          </Button>
+        </div>
+
+        {status && <p className="mt-6 text-sm text-slate-600">{status}</p>}
+
+        {dashboard && (
+          <>
+            <div className="mt-6 grid gap-4 md:grid-cols-5">
+              {[
+                ['Total Employees', attendance.totalEmployees],
+                ['Present Today', attendance.present],
+                ['Absent Today', attendance.absent],
+                ['Pending Out', attendance.pendingPunchOut],
+                ['Cameras Online', cameras.online],
+              ].map(([label, value]) => (
+                <div
+                  className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                  key={label}
+                >
+                  <p className="text-sm text-slate-600">{label}</p>
+                  <p className="mt-2 text-3xl font-semibold">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_420px]">
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold">Attendance Overview</h2>
+                <div className="mt-5 space-y-4">
+                  {[
+                    ['Present', attendance.present, 'bg-emerald-600'],
+                    ['Absent', attendance.absent, 'bg-red-500'],
+                    ['Completed', attendance.completed, 'bg-slate-900'],
+                  ].map(([label, value, color]) => (
+                    <div key={label}>
+                      <div className="mb-1 flex justify-between text-sm">
+                        <span>{label}</span>
+                        <span>{value}</span>
+                      </div>
+                      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full ${color}`}
+                          style={{
+                            width: `${Math.min((value / attendanceTotal) * 100, 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold">Camera Status</h2>
+                <div className="mt-5 space-y-4">
+                  {[
+                    ['Online', cameras.online, 'bg-emerald-600'],
+                    ['Offline', cameras.offline, 'bg-amber-500'],
+                    ['Disabled', cameras.disabled, 'bg-slate-400'],
+                  ].map(([label, value, color]) => (
+                    <div key={label}>
+                      <div className="mb-1 flex justify-between text-sm">
+                        <span>{label}</span>
+                        <span>{value}</span>
+                      </div>
+                      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full ${color}`}
+                          style={{
+                            width: `${Math.min((value / cameraTotal) * 100, 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold">Recent Attendance</h2>
+                <div className="mt-4 divide-y divide-slate-200">
+                  {dashboard.recentActivity.map((item) => (
+                    <div className="py-3" key={item._id}>
+                      <p className="font-medium">
+                        {item.employee?.fullName || 'Unknown employee'}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        {item.punchOut ? 'Punch Out' : 'Punch In'} -{' '}
+                        {new Date(item.updatedAt).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                  {dashboard.recentActivity.length === 0 && (
+                    <p className="py-6 text-sm text-slate-600">No activity yet.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold">Live Activity</h2>
+                <div className="mt-4 divide-y divide-slate-200">
+                  {events.map((event) => (
+                    <div className="py-3" key={event.id}>
+                      <p className="font-medium">{event.type}</p>
+                      <p className="text-sm text-slate-600">
+                        {event.payload?.message ||
+                          event.payload?.name ||
+                          'Realtime event received'}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {new Date(event.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                  {events.length === 0 && (
+                    <p className="py-6 text-sm text-slate-600">
+                      Waiting for live events.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </section>
     </main>
   )
@@ -812,6 +1018,7 @@ export default function App() {
       <Route element={<AuthForm mode="login" />} path="/login" />
       <Route element={<AuthForm mode="register" />} path="/register" />
       <Route element={<SessionPage />} path="/session" />
+      <Route element={<DashboardPage />} path="/dashboard" />
       <Route element={<EmployeesPage />} path="/employees" />
       <Route element={<AttendancePage />} path="/attendance" />
       <Route element={<CamerasPage />} path="/cameras" />

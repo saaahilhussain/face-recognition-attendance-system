@@ -7,7 +7,7 @@ The system is organized as a monorepo with a React frontend, Node.js backend, Mo
 ## Services
 
 - `frontend/`: Vite React app with React Router, Tailwind CSS, shadcn/ui configuration, Axios, and Socket.IO client helpers.
-- `backend/`: Express API with MVC-style folders, MongoDB connection config, JWT authentication, employee APIs, camera APIs, attendance marking, recognition proxy routes, and Socket.IO bootstrap.
+- `backend/`: Express API with MVC-style folders, MongoDB connection config, JWT authentication, employee APIs, camera APIs, attendance marking, dashboard aggregation, recognition proxy routes, and Socket.IO bootstrap.
 - `ai-service/`: FastAPI service with health, webcam status, face detection, and recognition endpoints.
 
 ## Prerequisites
@@ -111,6 +111,7 @@ Backend:
 - `PATCH /cameras/:id`
 - `PATCH /cameras/:id/status`
 - `DELETE /cameras/:id`
+- `GET /dashboard/overview`
 - Env: `PORT`, `MONGO_URI`, `CLIENT_URL`, `JWT_SECRET`, `AI_SERVICE_URL`
 
 AI service:
@@ -232,8 +233,24 @@ Camera routes require:
 Authorization: Bearer <jwt-token>
 ```
 
+## Dashboard
+
+Dashboard support includes:
+
+- Overview cards for total employees, present, absent, pending punch-out, and online cameras
+- Attendance and camera status visual summaries
+- Recent attendance activity
+- Live activity feed for `attendance:marked`, `camera:connected`, and `camera:disconnected`
+- Protected dashboard endpoint at `GET /dashboard/overview`
+- Frontend dashboard screen at `/dashboard`
+
+Dashboard routes require:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
 ## Remaining Work
 
 - Real webcam capture flow in the frontend
-- Dashboard workflows
 - Reports and exports
