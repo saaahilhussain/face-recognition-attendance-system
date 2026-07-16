@@ -24,6 +24,11 @@ import {
   listAttendance,
   manualMarkAttendance,
 } from '@/lib/attendance'
+import {
+  createCamera,
+  listCameras,
+  updateCameraStatus,
+} from '@/lib/cameras'
 import { createEmployee, listEmployees } from '@/lib/employees'
 
 const statusItems = [
@@ -50,14 +55,15 @@ function HomePage() {
       <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center px-6 py-10">
         <div className="mb-8">
           <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-            Phase 3 Authentication
+            Attendance Management
           </p>
           <h1 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight md:text-5xl">
             Face Recognition Attendance System
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-            Admin registration, login, JWT session validation, and protected
-            backend routes are ready for the next implementation phase.
+            Admin authentication, employee records, camera management,
+            recognition hooks, and attendance marking are wired for local
+            development.
           </p>
         </div>
 
@@ -102,6 +108,12 @@ function HomePage() {
             <Link to="/attendance">
               <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
               Attendance
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/cameras">
+              <Camera className="h-4 w-4" aria-hidden="true" />
+              Cameras
             </Link>
           </Button>
           <Button asChild variant="outline">
@@ -564,6 +576,209 @@ function AttendancePage() {
   )
 }
 
+function CamerasPage() {
+  const [cameras, setCameras] = useState([])
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [form, setForm] = useState({
+    name: '',
+    location: '',
+    source: '0',
+    type: 'webcam',
+  })
+
+  async function loadCameras(params = {}) {
+    setStatus('Loading cameras...')
+
+    try {
+      const data = await listCameras(params)
+      setCameras(data.items)
+      setStatus('')
+    } catch (error) {
+      setStatus(error.response?.data?.message || 'Login required to view cameras')
+    }
+  }
+
+  useEffect(() => {
+    loadCameras()
+  }, [])
+
+  function updateField(event) {
+    setForm((current) => ({
+      ...current,
+      [event.target.name]: event.target.value,
+    }))
+  }
+
+  async function handleCreate(event) {
+    event.preventDefault()
+
+    try {
+      await createCamera(form)
+      setForm({
+        name: '',
+        location: '',
+        source: '0',
+        type: 'webcam',
+      })
+      await loadCameras()
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.errors?.join(', ') ||
+        'Camera creation failed'
+      setStatus(message)
+    }
+  }
+
+  async function handleSearch(event) {
+    event.preventDefault()
+    await loadCameras({ search })
+  }
+
+  async function handleStatusChange(id, nextStatus) {
+    try {
+      await updateCameraStatus(id, nextStatus)
+      await loadCameras({ search })
+    } catch (error) {
+      setStatus(error.response?.data?.message || 'Camera status update failed')
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-950">
+      <section className="mx-auto max-w-6xl">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <Link className="text-sm font-medium text-emerald-700" to="/">
+              Back
+            </Link>
+            <h1 className="mt-4 text-3xl font-semibold">Cameras</h1>
+          </div>
+          <Button onClick={() => loadCameras({ search })} variant="outline">
+            Refresh
+          </Button>
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[380px_1fr]">
+          <form
+            className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+            onSubmit={handleCreate}
+          >
+            <h2 className="text-lg font-semibold">Register Camera</h2>
+            <div className="mt-4 grid gap-3">
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Name</span>
+                <input
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                  name="name"
+                  onChange={updateField}
+                  required
+                  type="text"
+                  value={form.name}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Location</span>
+                <input
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                  name="location"
+                  onChange={updateField}
+                  required
+                  type="text"
+                  value={form.location}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Source</span>
+                <input
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                  name="source"
+                  onChange={updateField}
+                  required
+                  type="text"
+                  value={form.source}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Type</span>
+                <select
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                  name="type"
+                  onChange={updateField}
+                  value={form.type}
+                >
+                  <option value="webcam">Webcam</option>
+                  <option value="ip_camera">IP Camera</option>
+                  <option value="iriun">Iriun</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+            </div>
+            <Button className="mt-5 w-full" type="submit">
+              Create Camera
+            </Button>
+          </form>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <form className="flex gap-2" onSubmit={handleSearch}>
+              <input
+                className="h-10 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by name, location, or source"
+                type="search"
+                value={search}
+              />
+              <Button type="submit">
+                <Search className="h-4 w-4" aria-hidden="true" />
+                Search
+              </Button>
+            </form>
+
+            {status && <p className="mt-4 text-sm text-slate-600">{status}</p>}
+
+            <div className="mt-5 divide-y divide-slate-200">
+              {cameras.map((cameraItem) => (
+                <div className="py-4" key={cameraItem._id}>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="font-medium">{cameraItem.name}</p>
+                      <p className="text-sm text-slate-600">
+                        {cameraItem.location} - {cameraItem.type}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        Source: {cameraItem.source}
+                      </p>
+                    </div>
+                    <span className="text-sm capitalize text-slate-600">
+                      {cameraItem.status}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {['online', 'offline', 'disabled'].map((nextStatus) => (
+                      <Button
+                        key={nextStatus}
+                        onClick={() => handleStatusChange(cameraItem._id, nextStatus)}
+                        type="button"
+                        variant={cameraItem.status === nextStatus ? 'default' : 'outline'}
+                      >
+                        {nextStatus}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {!status && cameras.length === 0 && (
+                <p className="py-6 text-sm text-slate-600">No cameras found.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  )
+}
+
 function HealthPage() {
   return (
     <main className="min-h-screen bg-white px-6 py-10 text-slate-950">
@@ -599,6 +814,7 @@ export default function App() {
       <Route element={<SessionPage />} path="/session" />
       <Route element={<EmployeesPage />} path="/employees" />
       <Route element={<AttendancePage />} path="/attendance" />
+      <Route element={<CamerasPage />} path="/cameras" />
       <Route element={<HealthPage />} path="/health" />
     </Routes>
   )

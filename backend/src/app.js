@@ -3,6 +3,7 @@ import dotenv from 'dotenv'
 import express from 'express'
 import attendanceRoutes from './routes/attendance.routes.js'
 import authRoutes from './routes/auth.routes.js'
+import cameraRoutes from './routes/camera.routes.js'
 import databaseRoutes from './routes/database.routes.js'
 import employeeRoutes from './routes/employee.routes.js'
 import healthRoutes from './routes/health.routes.js'
@@ -26,6 +27,7 @@ app.use('/database', databaseRoutes)
 app.use('/employees', employeeRoutes)
 app.use('/recognition', recognitionRoutes)
 app.use('/attendance', attendanceRoutes)
+app.use('/cameras', cameraRoutes)
 
 app.use((req, res) => {
   res.status(404).json({

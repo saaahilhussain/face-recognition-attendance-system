@@ -7,7 +7,7 @@ The system is organized as a monorepo with a React frontend, Node.js backend, Mo
 ## Services
 
 - `frontend/`: Vite React app with React Router, Tailwind CSS, shadcn/ui configuration, Axios, and Socket.IO client helpers.
-- `backend/`: Express API with MVC-style folders, MongoDB connection config, JWT authentication, employee APIs, attendance marking, recognition proxy routes, and Socket.IO bootstrap.
+- `backend/`: Express API with MVC-style folders, MongoDB connection config, JWT authentication, employee APIs, camera APIs, attendance marking, recognition proxy routes, and Socket.IO bootstrap.
 - `ai-service/`: FastAPI service with health, webcam status, face detection, and recognition endpoints.
 
 ## Prerequisites
@@ -105,6 +105,12 @@ Backend:
 - `GET /attendance/summary`
 - `POST /attendance/mark`
 - `POST /attendance/manual-mark`
+- `GET /cameras`
+- `POST /cameras`
+- `GET /cameras/:id`
+- `PATCH /cameras/:id`
+- `PATCH /cameras/:id/status`
+- `DELETE /cameras/:id`
 - Env: `PORT`, `MONGO_URI`, `CLIENT_URL`, `JWT_SECRET`, `AI_SERVICE_URL`
 
 AI service:
@@ -208,9 +214,26 @@ Attendance routes require:
 Authorization: Bearer <jwt-token>
 ```
 
+## Camera Management
+
+Camera management includes:
+
+- Register camera name, location, source, and type
+- Search and list cameras
+- Update camera metadata
+- Set camera status to online, offline, or disabled
+- Track last-seen timestamp when cameras are marked online
+- Emit `camera:connected` and `camera:disconnected` Socket.IO events
+- Frontend camera management screen
+
+Camera routes require:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
 ## Remaining Work
 
 - Real webcam capture flow in the frontend
 - Dashboard workflows
-- Camera management UI
 - Reports and exports
