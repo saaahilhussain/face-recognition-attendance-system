@@ -1,85 +1,113 @@
 # Face Recognition Attendance System
 
-An enterprise-grade face recognition attendance management system developed as an internship project for the **Information Systems Department, IOCL AOD**.
+Enterprise-style face recognition attendance management system for the IOCL AOD Information Systems internship project.
 
-The system automates employee attendance using facial recognition, eliminating manual registers and reducing proxy attendance. Employees register once by capturing facial data, after which the system recognizes them in real time through a camera and automatically records punch-in and punch-out events.
+This repository is currently at Phase 1: monorepo scaffolding, environment examples, health checks, REST/WebSocket wiring, and starter AI-service structure.
 
-The application follows a microservices architecture consisting of a React frontend, a Node.js backend responsible for business logic and data management, and a dedicated Python AI service that performs face detection and recognition. Communication between services is handled through REST APIs, while Socket.IO provides real-time updates to the administrator dashboard.
+## Services
 
-## Features
+- `frontend/`: Vite React app with React Router, Tailwind CSS, shadcn/ui configuration, Axios, and Socket.IO client helpers.
+- `backend/`: Express API with MVC-style folders, MongoDB connection config, health endpoint, and Socket.IO server bootstrap.
+- `ai-service/`: FastAPI scaffold with health, webcam-status, and face-detection placeholder endpoints.
 
-- Face-based employee registration
-- Automatic punch-in and punch-out
-- Real-time face recognition
-- Employee management
-- Attendance management
-- Daily attendance logs
-- Monthly attendance reports
-- Live administrator dashboard
-- Camera management
-- Real-time updates using WebSockets
-- Export reports to CSV, Excel, and PDF
+## Prerequisites
 
-## Tech Stack
+- Node.js and npm
+- Local MongoDB on `mongodb://127.0.0.1:27017/face_attendance`
+- Python for the AI service. If `python --version` is not callable in the shell, install/fix Python before running the AI service.
 
-### Frontend
+## Environment Setup
 
-- React (Vite)
-- React Router
-- Tailwind CSS
-- shadcn/ui
-- Socket.IO Client
+Copy each example file before running services:
 
-### Backend
-
-- Node.js
-- Express.js
-- MongoDB
-- Mongoose
-- JWT Authentication
-- Socket.IO
-
-### AI Service
-
-- Python
-- FastAPI
-- OpenCV
-- InsightFace (ArcFace)
-- ONNX Runtime
-
-## System Architecture
-
-```text
-                +--------------------+
-                |   React Frontend   |
-                +--------------------+
-                          │
-                  REST + WebSocket
-                          │
-                          ▼
-               +----------------------+
-               | Node.js + Express API|
-               +----------------------+
-                  │               │
-                  │               │
-                  ▼               ▼
-        +----------------+   +------------------+
-        |    MongoDB     |   | Python AI Service|
-        +----------------+   +------------------+
-                                      │
-                                      ▼
-                          Face Detection & Recognition
+```powershell
+Copy-Item backend\.env.example backend\.env
+Copy-Item frontend\.env.example frontend\.env
+Copy-Item ai-service\.env.example ai-service\.env
 ```
 
-## Project Objectives
+Default ports:
 
-- Automate attendance using facial recognition.
-- Provide a real-time administrative dashboard.
-- Eliminate duplicate and proxy attendance.
-- Learn microservice architecture using Node.js and Python.
-- Gain hands-on experience with computer vision and WebSockets.
-- Build a production-style portfolio project suitable for enterprise environments.
+- Frontend: `5173`
+- Backend: `5000`
+- AI service: `8000`
 
-## Project Status
+## Run Frontend
 
-🚧 Under Development
+```powershell
+cd frontend
+npm.cmd install
+npm.cmd run dev
+```
+
+Open `http://localhost:5173`.
+
+## Run Backend
+
+```powershell
+cd backend
+npm.cmd install
+npm.cmd run dev
+```
+
+Health check:
+
+```powershell
+Invoke-WebRequest http://localhost:5000/health
+```
+
+MongoDB is allowed to be offline during Phase 1. The backend starts and reports the database state in `/health`.
+
+## Run AI Service
+
+After Python is installed and available:
+
+```powershell
+cd ai-service
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+Health check:
+
+```powershell
+Invoke-WebRequest http://localhost:8000/health
+```
+
+## Public Interfaces
+
+Backend:
+
+- `GET /health`
+- Env: `PORT`, `MONGO_URI`, `CLIENT_URL`, `JWT_SECRET`, `AI_SERVICE_URL`
+
+AI service:
+
+- `GET /health`
+- `GET /vision/webcam`
+- `GET /vision/face-detection`
+- Env: `PORT`, `BACKEND_URL`, `CAMERA_INDEX`
+
+Frontend:
+
+- Env: `VITE_API_URL`, `VITE_SOCKET_URL`
+
+## Phase 1 Scope
+
+Implemented:
+
+- Project scaffolds and service folder structure
+- Backend health endpoint and Socket.IO initialization
+- Frontend routing shell and API/socket helpers
+- AI FastAPI placeholder structure
+- Environment examples and development instructions
+
+Not implemented yet:
+
+- Authentication
+- Employee CRUD
+- Attendance logic
+- Real webcam capture and face recognition runtime verification
+- Dashboard workflows
