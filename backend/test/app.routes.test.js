@@ -65,6 +65,39 @@ describe('public backend routes', () => {
     assert.equal(response.status, 404)
     assert.equal(body.status, 'not_found')
   })
+
+  it('validates public employee registration payloads', async () => {
+    const response = await request('/public/employees/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    })
+    const body = await response.json()
+
+    assert.equal(response.status, 400)
+    assert.equal(body.status, 'failed')
+    assert.ok(body.errors.includes('Employee code is required'))
+    assert.ok(body.errors.includes('Full name is required'))
+    assert.ok(body.errors.includes('Department is required'))
+    assert.ok(body.errors.includes('At least one face image is required'))
+  })
+
+  it('validates public attendance payloads', async () => {
+    const response = await request('/public/attendance/mark', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    })
+    const body = await response.json()
+
+    assert.equal(response.status, 400)
+    assert.equal(body.status, 'failed')
+    assert.ok(body.errors.includes('employeeId is required'))
+  })
 })
 
 describe('protected backend routes', () => {

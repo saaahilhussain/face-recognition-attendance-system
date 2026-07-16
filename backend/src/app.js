@@ -8,6 +8,7 @@ import dashboardRoutes from './routes/dashboard.routes.js'
 import databaseRoutes from './routes/database.routes.js'
 import employeeRoutes from './routes/employee.routes.js'
 import healthRoutes from './routes/health.routes.js'
+import publicRoutes from './routes/public.routes.js'
 import realtimeRoutes from './routes/realtime.routes.js'
 import recognitionRoutes from './routes/recognition.routes.js'
 import reportRoutes from './routes/report.routes.js'
@@ -25,6 +26,7 @@ app.use(
 app.use(express.json())
 
 app.use('/auth', authRoutes)
+app.use('/public', publicRoutes)
 app.use('/health', healthRoutes)
 app.use('/database', databaseRoutes)
 app.use('/employees', employeeRoutes)

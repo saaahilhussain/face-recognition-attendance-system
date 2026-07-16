@@ -1,5 +1,4 @@
 import {
-  Activity,
   BarChart3,
   Camera,
   CheckCircle2,
@@ -10,13 +9,12 @@ import {
   LogOut,
   ClipboardCheck,
   Search,
-  Server,
   ShieldAlert,
   UserPlus,
   Users,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { Link, Route, Routes, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import {
   clearAuthToken,
@@ -44,25 +42,11 @@ import {
   downloadEmployeeReport,
   downloadMonthlyReport,
 } from '@/lib/reports'
+import {
+  markAttendancePublic,
+  registerEmployeePublic,
+} from '@/lib/public'
 import { socket } from '@/lib/socket'
-
-const statusItems = [
-  {
-    label: 'Frontend',
-    value: 'Vite React ready',
-    icon: Activity,
-  },
-  {
-    label: 'Backend API',
-    value: import.meta.env.VITE_API_URL || 'http://localhost:5000',
-    icon: Server,
-  },
-  {
-    label: 'Socket.IO',
-    value: import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000',
-    icon: Camera,
-  },
-]
 
 function notify(message, type = 'info') {
   window.dispatchEvent(
@@ -151,40 +135,20 @@ function EmptyState({ title, description }) {
 function HomePage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
-      <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center px-6 py-10">
+      <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center px-6 py-10 text-center">
         <div className="mb-8">
           <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-            Attendance Management
+            Welcome
           </p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight md:text-5xl">
-            Face Recognition Attendance System
+          <h1 className="mx-auto mt-3 max-w-3xl text-4xl font-semibold leading-tight md:text-5xl">
+            IndianOil AOD StateOffice Information Systems Department
           </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-            Admin authentication, employee records, camera management,
-            recognition hooks, and attendance marking are wired for local
-            development.
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-600">
+            Welcome to the Face Recognition Attendance System.
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          {statusItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <div
-                className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-                key={item.label}
-              >
-                <Icon className="h-6 w-6 text-emerald-700" aria-hidden="true" />
-                <h2 className="mt-4 text-lg font-semibold">{item.label}</h2>
-                <p className="mt-2 break-words text-sm text-slate-600">
-                  {item.value}
-                </p>
-              </div>
-            )
-          })}
-        </div>
-
-        <nav className="mt-8 flex flex-wrap gap-3">
+        <nav className="flex flex-wrap justify-center gap-3">
           <Button asChild>
             <Link to="/login">
               <Lock className="h-4 w-4" aria-hidden="true" />
@@ -192,12 +156,41 @@ function HomePage() {
             </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link to="/register">
-              <UserPlus className="h-4 w-4" aria-hidden="true" />
-              Register Admin
+            <Link to="/mark-attendance">
+              <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+              Mark Your Attendance
             </Link>
           </Button>
           <Button asChild variant="outline">
+            <Link to="/employee-register">
+              <UserPlus className="h-4 w-4" aria-hidden="true" />
+              Register as Employee
+            </Link>
+          </Button>
+        </nav>
+      </section>
+    </main>
+  )
+}
+
+function AdminHomePage() {
+  return (
+    <main className="min-h-screen bg-slate-50 text-slate-950">
+      <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center px-6 py-10 text-center">
+        <div className="mb-8">
+          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
+            Admin Console
+          </p>
+          <h1 className="mx-auto mt-3 max-w-3xl text-4xl font-semibold leading-tight md:text-5xl">
+            IndianOil AOD StateOffice Information Systems Department
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-600">
+            Manage employees, attendance, cameras, reports, and realtime operations.
+          </p>
+        </div>
+
+        <nav className="flex flex-wrap justify-center gap-3">
+          <Button asChild>
             <Link to="/dashboard">
               <BarChart3 className="h-4 w-4" aria-hidden="true" />
               Dashboard
@@ -231,6 +224,294 @@ function HomePage() {
             <Link to="/health">Setup Status</Link>
           </Button>
         </nav>
+      </section>
+    </main>
+  )
+}
+
+function ProtectedRoute({ children }) {
+  const [state, setState] = useState('checking')
+
+  useEffect(() => {
+    getSession()
+      .then(() => setState('ok'))
+      .catch(() => {
+        clearAuthToken()
+        setState('failed')
+      })
+  }, [])
+
+  if (state === 'checking') {
+    return (
+      <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-950">
+        <section className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md flex-col justify-center">
+          <LoadingMessage>Checking admin session...</LoadingMessage>
+        </section>
+      </main>
+    )
+  }
+
+  if (state === 'failed') {
+    return <Navigate to="/login" replace />
+  }
+
+  return children
+}
+
+function EmployeeRegisterPage() {
+  const captureLabels = [
+    ['front', 'Front Face'],
+    ['left', 'Left Face'],
+    ['right', 'Right Face'],
+  ]
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const [form, setForm] = useState({
+    employeeCode: '',
+    fullName: '',
+    email: '',
+    phone: '',
+    department: '',
+    designation: '',
+  })
+  const [capturedFaces, setCapturedFaces] = useState([])
+  const [cameraStatus, setCameraStatus] = useState('Camera not started')
+  const [cameraStream, setCameraStream] = useState(null)
+  const [status, setStatus] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    return () => {
+      cameraStream?.getTracks().forEach((track) => track.stop())
+    }
+  }, [cameraStream])
+
+  function updateField(event) {
+    setForm((current) => ({
+      ...current,
+      [event.target.name]: event.target.value,
+    }))
+  }
+
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false,
+      })
+      setCameraStream(stream)
+      setCameraStatus('Camera ready')
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+    } catch {
+      const message = 'Camera access denied or unavailable'
+      setCameraStatus(message)
+      notify(message, 'error')
+    }
+  }
+
+  function captureFace(label) {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+
+    if (!video || !canvas || video.readyState < 2) {
+      setCameraStatus('Start the camera before capturing')
+      return
+    }
+
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    const path = canvas.toDataURL('image/jpeg', 0.8)
+    const title = captureLabels.find((item) => item[0] === label)?.[1] || 'Face'
+
+    setCapturedFaces((current) => [
+      ...current.filter((image) => image.label !== label),
+      {
+        label,
+        path,
+        capturedAt: new Date().toISOString(),
+      },
+    ])
+    setCameraStatus(`${title} captured`)
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    const missingCaptures = captureLabels.filter(
+      ([label]) => !capturedFaces.some((image) => image.label === label),
+    )
+
+    if (missingCaptures.length > 0) {
+      const message = 'Capture front, left, and right face images before registration'
+      setStatus(message)
+      notify(message, 'error')
+      return
+    }
+
+    setIsSubmitting(true)
+    setStatus('')
+
+    try {
+      const result = await registerEmployeePublic({
+        ...form,
+        registeredImages: capturedFaces,
+      })
+      setStatus(`Registered successfully. Employee ID: ${result.employee._id}`)
+      notify('Employee registered')
+      setForm({
+        employeeCode: '',
+        fullName: '',
+        email: '',
+        phone: '',
+        department: '',
+        designation: '',
+      })
+      setCapturedFaces([])
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.errors?.join(', ') ||
+        'Employee registration failed'
+      setStatus(message)
+      notify(message, 'error')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-950">
+      <section className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-lg flex-col justify-center">
+        <Link className="mb-8 text-sm font-medium text-emerald-700" to="/">
+          Back
+        </Link>
+        <form
+          className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+          onSubmit={handleSubmit}
+        >
+          <h1 className="text-2xl font-semibold">Register as Employee</h1>
+          <div className="mt-6 grid gap-4">
+            {[
+              ['employeeCode', 'Employee Code'],
+              ['fullName', 'Full Name'],
+              ['email', 'Email'],
+              ['phone', 'Phone'],
+              ['department', 'Department'],
+              ['designation', 'Designation'],
+            ].map(([name, label]) => (
+              <label className="block" key={name}>
+                <span className="text-sm font-medium text-slate-700">{label}</span>
+                <input
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+                  name={name}
+                  onChange={updateField}
+                  required={['employeeCode', 'fullName', 'department'].includes(name)}
+                  type={name === 'email' ? 'email' : 'text'}
+                  value={form[name]}
+                />
+              </label>
+            ))}
+          </div>
+          <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">Face Capture</h2>
+                <p className="mt-1 text-sm text-slate-600">{cameraStatus}</p>
+              </div>
+              <Button onClick={startCamera} type="button" variant="outline">
+                <Camera className="h-4 w-4" aria-hidden="true" />
+                Start Camera
+              </Button>
+            </div>
+            <video
+              autoPlay
+              className="mt-4 aspect-video w-full rounded-md bg-slate-900 object-cover"
+              muted
+              playsInline
+              ref={videoRef}
+            />
+            <canvas className="hidden" ref={canvasRef} />
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              {captureLabels.map(([label, title]) => {
+                const image = capturedFaces.find((item) => item.label === label)
+
+                return (
+                  <Button
+                    key={label}
+                    onClick={() => captureFace(label)}
+                    type="button"
+                    variant={image ? 'default' : 'outline'}
+                  >
+                    {image ? 'Retake' : 'Capture'} {title}
+                  </Button>
+                )
+              })}
+            </div>
+          </div>
+          {status && <div className="mt-4"><StatusMessage>{status}</StatusMessage></div>}
+          <Button className="mt-5 w-full" disabled={isSubmitting} type="submit">
+            {isSubmitting ? 'Submitting...' : 'Register Employee'}
+          </Button>
+        </form>
+      </section>
+    </main>
+  )
+}
+
+function PublicAttendancePage() {
+  const [employeeId, setEmployeeId] = useState('')
+  const [status, setStatus] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setIsSubmitting(true)
+    setStatus('')
+
+    try {
+      const result = await markAttendancePublic({ employeeId })
+      setStatus(result.message)
+      notify(result.message)
+      setEmployeeId('')
+    } catch (error) {
+      const message = error.response?.data?.message || 'Attendance mark failed'
+      setStatus(message)
+      notify(message, 'error')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-950">
+      <section className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md flex-col justify-center">
+        <Link className="mb-8 text-sm font-medium text-emerald-700" to="/">
+          Back
+        </Link>
+        <form
+          className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+          onSubmit={handleSubmit}
+        >
+          <h1 className="text-2xl font-semibold">Mark Your Attendance</h1>
+          <label className="mt-6 block">
+            <span className="text-sm font-medium text-slate-700">Employee ID</span>
+            <input
+              className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
+              onChange={(event) => setEmployeeId(event.target.value)}
+              required
+              type="text"
+              value={employeeId}
+            />
+          </label>
+          {status && <div className="mt-4"><StatusMessage>{status}</StatusMessage></div>}
+          <Button className="mt-5 w-full" disabled={isSubmitting} type="submit">
+            {isSubmitting ? 'Marking...' : 'Mark Attendance'}
+          </Button>
+        </form>
       </section>
     </main>
   )
@@ -271,7 +552,7 @@ function AuthForm({ mode }) {
         notify('Login successful')
       }
 
-      navigate('/session')
+      navigate('/dashboard')
     } catch (error) {
       const message =
         error.response?.data?.message ||
@@ -336,6 +617,23 @@ function AuthForm({ mode }) {
               {isSubmitting ? 'Submitting...' : isRegister ? 'Create Admin' : 'Login'}
             </Button>
           </form>
+          <div className="mt-5 border-t border-slate-200 pt-4 text-center text-sm text-slate-600">
+            {isRegister ? (
+              <>
+                Already have an admin account?{' '}
+                <Link className="font-medium text-emerald-700" to="/login">
+                  Login as admin
+                </Link>
+              </>
+            ) : (
+              <>
+                Need an admin account?{' '}
+                <Link className="font-medium text-emerald-700" to="/admin-register">
+                  Register as admin
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       </section>
     </main>
@@ -1512,14 +1810,18 @@ function HealthPage() {
         </Link>
         <h1 className="mt-6 text-3xl font-semibold">Setup Status</h1>
         <div className="mt-6 rounded-lg border border-slate-200">
-          {statusItems.map((item) => (
+          {[
+            ['Frontend', 'Vite React ready'],
+            ['Backend API', import.meta.env.VITE_API_URL || 'http://localhost:5000'],
+            ['Socket.IO', import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'],
+          ].map(([label, value]) => (
             <div
               className="flex flex-col gap-1 border-b border-slate-200 p-4 last:border-b-0 md:flex-row md:items-center md:justify-between"
-              key={item.label}
+              key={label}
             >
-              <span className="font-medium">{item.label}</span>
+              <span className="font-medium">{label}</span>
               <span className="break-words text-sm text-slate-600">
-                {item.value}
+                {value}
               </span>
             </div>
           ))}
@@ -1530,20 +1832,26 @@ function HealthPage() {
 }
 
 export default function App() {
+  const adminOnly = (page) => <ProtectedRoute>{page}</ProtectedRoute>
+
   return (
     <>
       <ToastViewport />
       <Routes>
         <Route element={<HomePage />} path="/" />
+        <Route element={<EmployeeRegisterPage />} path="/employee-register" />
+        <Route element={<PublicAttendancePage />} path="/mark-attendance" />
         <Route element={<AuthForm mode="login" />} path="/login" />
+        <Route element={<AuthForm mode="register" />} path="/admin-register" />
         <Route element={<AuthForm mode="register" />} path="/register" />
-        <Route element={<SessionPage />} path="/session" />
-        <Route element={<DashboardPage />} path="/dashboard" />
-        <Route element={<EmployeesPage />} path="/employees" />
-        <Route element={<AttendancePage />} path="/attendance" />
-        <Route element={<CamerasPage />} path="/cameras" />
-        <Route element={<ReportsPage />} path="/reports" />
-        <Route element={<HealthPage />} path="/health" />
+        <Route element={adminOnly(<AdminHomePage />)} path="/admin" />
+        <Route element={adminOnly(<SessionPage />)} path="/session" />
+        <Route element={adminOnly(<DashboardPage />)} path="/dashboard" />
+        <Route element={adminOnly(<EmployeesPage />)} path="/employees" />
+        <Route element={adminOnly(<AttendancePage />)} path="/attendance" />
+        <Route element={adminOnly(<CamerasPage />)} path="/cameras" />
+        <Route element={adminOnly(<ReportsPage />)} path="/reports" />
+        <Route element={adminOnly(<HealthPage />)} path="/health" />
         <Route element={<NotFoundPage />} path="*" />
       </Routes>
     </>
