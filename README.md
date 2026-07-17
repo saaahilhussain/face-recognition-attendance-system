@@ -132,7 +132,7 @@ Backend:
 - `GET /reports/daily`
 - `GET /reports/monthly`
 - `GET /reports/employees/:employeeId`
-- Env: `PORT`, `MONGO_URI`, `CLIENT_URL`, `JWT_SECRET`, `AI_SERVICE_URL`
+- Env: `PORT`, `MONGO_URI`, `CLIENT_URLS`, `JWT_SECRET`, `AI_SERVICE_URL`, `REQUEST_BODY_LIMIT`
 
 AI service:
 

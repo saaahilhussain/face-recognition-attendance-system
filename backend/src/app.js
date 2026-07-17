@@ -1,6 +1,7 @@
 import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
+import { corsOptions } from './config/cors.js'
 import attendanceRoutes from './routes/attendance.routes.js'
 import authRoutes from './routes/auth.routes.js'
 import cameraRoutes from './routes/camera.routes.js'
@@ -18,12 +19,7 @@ dotenv.config()
 const app = express()
 const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '100mb'
 
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    credentials: true,
-  }),
-)
+app.use(cors(corsOptions))
 app.use(express.json({ limit: requestBodyLimit }))
 app.use(express.urlencoded({ extended: true, limit: requestBodyLimit }))
 
