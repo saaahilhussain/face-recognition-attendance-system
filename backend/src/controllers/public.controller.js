@@ -1,5 +1,6 @@
 import { markAttendanceForEmployee } from '../services/attendance.service.js'
-import { createEmployee, getEmployeeByCode } from '../services/employee.service.js'
+import { detectFaces, verifyEmployeeFace } from '../services/ai.service.js'
+import { createEmployee, getEmployeeByCode, getEmployeeById } from '../services/employee.service.js'
 
 const imageLabels = ['front', 'left', 'right', 'other']
 
@@ -34,10 +35,13 @@ function validateEmployeePayload(payload) {
 
 function handlePublicError(error, res) {
   const statusCode = error.statusCode || 500
+  const message = statusCode >= 500 && !error.expose ? 'Public request failed' : error.message
+
+  console.error(`Public request failed: ${error.message}`)
 
   return res.status(statusCode).json({
     status: statusCode >= 500 ? 'error' : 'failed',
-    message: statusCode >= 500 ? 'Public request failed' : error.message,
+    message,
   })
 }
 
@@ -60,10 +64,30 @@ export async function registerEmployee(req, res) {
   }
 }
 
+export async function checkEmployee(req, res) {
+  try {
+    const employee = await getEmployeeByCode(req.params.employeeCode)
+
+    return res.json({
+      status: 'ok',
+      employee: {
+        id: employee._id,
+        employeeCode: employee.employeeCode,
+        fullName: employee.fullName,
+        department: employee.department,
+      },
+    })
+  } catch (error) {
+    return handlePublicError(error, res)
+  }
+}
+
 export async function markAttendance(req, res) {
   try {
     const employeeCode = String(req.body.employeeCode || '').trim()
     const employeeId = String(req.body.employeeId || '').trim()
+    const requestedAction = req.body.action || null
+    const imageBase64 = String(req.body.imageBase64 || '').trim()
 
     if (!employeeCode && !employeeId) {
       return res.status(400).json({
@@ -72,21 +96,58 @@ export async function markAttendance(req, res) {
       })
     }
 
+    if (!imageBase64) {
+      return res.status(400).json({
+        status: 'failed',
+        errors: ['imageBase64 is required'],
+      })
+    }
+
     let resolvedEmployeeId = employeeId
+    let employee = null
 
     if (employeeCode) {
-      const employee = await getEmployeeByCode(employeeCode)
+      employee = await getEmployeeByCode(employeeCode, { includeFaceEmbedding: true })
       resolvedEmployeeId = employee._id.toString()
     }
+
+    if (!employee) {
+      employee = await getEmployeeById(employeeId, { includeFaceEmbedding: true })
+    }
+
+    await verifyEmployeeFace(imageBase64, employee, req.body.threshold)
 
     const result = await markAttendanceForEmployee({
       employeeId: resolvedEmployeeId,
       source: 'public',
+      requestedAction,
     })
 
     return res.json({
       status: 'ok',
       ...result,
+    })
+  } catch (error) {
+    return handlePublicError(error, res)
+  }
+}
+
+export async function detectFace(req, res) {
+  try {
+    const imageBase64 = String(req.body.imageBase64 || '').trim()
+
+    if (!imageBase64) {
+      return res.status(400).json({
+        status: 'failed',
+        errors: ['imageBase64 is required'],
+      })
+    }
+
+    const result = await detectFaces(imageBase64)
+
+    return res.json({
+      status: 'ok',
+      result,
     })
   } catch (error) {
     return handlePublicError(error, res)

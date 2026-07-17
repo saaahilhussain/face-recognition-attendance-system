@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 import { Employee } from '../models/employee.model.js'
+import { createFaceEmbeddingFromImages } from './ai.service.js'
 import { emitSocketEvent } from '../socket/emitter.js'
 
 function toEmployeeFilter(query) {
@@ -66,7 +67,19 @@ export async function createEmployee(payload) {
     throw error
   }
 
-  const employee = await Employee.create(payload)
+  const employeePayload = { ...payload }
+
+  if (
+    (!Array.isArray(employeePayload.faceEmbedding) || employeePayload.faceEmbedding.length === 0) &&
+    Array.isArray(employeePayload.registeredImages) &&
+    employeePayload.registeredImages.length > 0
+  ) {
+    employeePayload.faceEmbedding = await createFaceEmbeddingFromImages(
+      employeePayload.registeredImages,
+    )
+  }
+
+  const employee = await Employee.create(employeePayload)
 
   emitSocketEvent('employee:registered', {
     employee: {
@@ -80,10 +93,16 @@ export async function createEmployee(payload) {
   return employee
 }
 
-export async function getEmployeeById(id) {
+export async function getEmployeeById(id, options = {}) {
   assertObjectId(id)
 
-  const employee = await Employee.findById(id)
+  const query = Employee.findById(id)
+
+  if (options.includeFaceEmbedding) {
+    query.select('+faceEmbedding')
+  }
+
+  const employee = await query
 
   if (!employee) {
     const error = new Error('Employee not found')
@@ -94,7 +113,7 @@ export async function getEmployeeById(id) {
   return employee
 }
 
-export async function getEmployeeByCode(employeeCode) {
+export async function getEmployeeByCode(employeeCode, options = {}) {
   const normalizedCode = String(employeeCode || '').trim().toUpperCase()
 
   if (!normalizedCode) {
@@ -103,7 +122,13 @@ export async function getEmployeeByCode(employeeCode) {
     throw error
   }
 
-  const employee = await Employee.findOne({ employeeCode: normalizedCode })
+  const query = Employee.findOne({ employeeCode: normalizedCode })
+
+  if (options.includeFaceEmbedding) {
+    query.select('+faceEmbedding')
+  }
+
+  const employee = await query
 
   if (!employee) {
     const error = new Error('Employee not found')
@@ -146,7 +171,7 @@ export async function deleteEmployee(id) {
 }
 
 export async function saveFaceRegistration(id, payload) {
-  const employee = await getEmployeeById(id)
+  const employee = await getEmployeeById(id, { includeFaceEmbedding: true })
 
   if (Array.isArray(payload.faceEmbedding)) {
     employee.faceEmbedding = payload.faceEmbedding
@@ -154,6 +179,10 @@ export async function saveFaceRegistration(id, payload) {
 
   if (Array.isArray(payload.registeredImages)) {
     employee.registeredImages = payload.registeredImages
+
+    if (!Array.isArray(payload.faceEmbedding)) {
+      employee.faceEmbedding = await createFaceEmbeddingFromImages(payload.registeredImages)
+    }
   }
 
   await employee.save()

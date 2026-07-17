@@ -3,6 +3,7 @@ import binascii
 import math
 from functools import lru_cache
 
+from app.core.config import settings
 from app.models.recognition import (
     FaceBox,
     FaceDetectionResult,
@@ -38,8 +39,10 @@ def _get_face_app():
             "InsightFace is required. Install ai-service requirements first."
         ) from error
 
-    app = FaceAnalysis(name="buffalo_l")
-    app.prepare(ctx_id=0, det_size=(640, 640))
+    providers = ["CPUExecutionProvider"] if settings.face_context_id < 0 else None
+    app = FaceAnalysis(name="buffalo_l", providers=providers)
+    detection_size = settings.face_detection_size
+    app.prepare(ctx_id=settings.face_context_id, det_size=(detection_size, detection_size))
     return app
 
 
@@ -57,6 +60,15 @@ def _decode_image(image_base64: str):
 
     if image is None:
         raise RecognitionRuntimeError("Image payload could not be decoded.")
+
+    height, width = image.shape[:2]
+    largest_side = max(width, height)
+
+    if largest_side > settings.max_image_dimension:
+        scale = settings.max_image_dimension / largest_side
+        resized_width = max(int(width * scale), 1)
+        resized_height = max(int(height * scale), 1)
+        image = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_AREA)
 
     return image
 
@@ -77,6 +89,60 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
 
 def _to_confidence(similarity: float) -> float:
     return round((similarity + 1) / 2, 4)
+
+
+def _estimate_face_pose(face, image_shape: tuple[int, int, int]):
+    _, np = _import_cv2()
+    landmarks = getattr(face, 'kps', None)
+
+    if landmarks is None:
+        return None
+
+    points_2d = np.asarray(landmarks, dtype=np.float64)
+
+    if points_2d.shape != (5, 2):
+        return None
+
+    height = max(float(image_shape[0]), 1.0)
+
+    left_eye = points_2d[0]
+    right_eye = points_2d[1]
+    nose = points_2d[2]
+    left_mouth = points_2d[3]
+    right_mouth = points_2d[4]
+
+    eye_center_x = (left_eye[0] + right_eye[0]) / 2.0
+    eye_center_y = (left_eye[1] + right_eye[1]) / 2.0
+    eye_distance = max(abs(right_eye[0] - left_eye[0]), 1.0)
+    mouth_distance = max(abs(right_mouth[0] - left_mouth[0]), 1.0)
+
+    yaw_ratio = (nose[0] - eye_center_x) / eye_distance
+    pitch_ratio = (nose[1] - eye_center_y) / max(height, 1.0)
+    roll_ratio = ((right_eye[1] - left_eye[1]) + (right_mouth[1] - left_mouth[1])) / (
+        2.0 * max(eye_distance, mouth_distance)
+    )
+
+    yaw = round(yaw_ratio * 90.0, 2)
+    pitch = round(pitch_ratio * 90.0, 2)
+    roll = round(roll_ratio * 90.0, 2)
+
+    orientation = 'front'
+    guidance = 'Front face identified. Hold still.'
+
+    if yaw > 12:
+        orientation = 'right'
+        guidance = 'Right side detected. Please turn the face to the left.'
+    elif yaw < -12:
+        orientation = 'left'
+        guidance = 'Left side detected. Please turn the face to the right.'
+
+    return {
+        'yaw': round(yaw, 2),
+        'pitch': round(pitch, 2),
+        'roll': round(roll, 2),
+        'orientation': orientation,
+        'guidance': guidance,
+    }
 
 
 def _best_match(embedding: list[float], known_faces: list[KnownFace], threshold: float):
@@ -125,6 +191,7 @@ def detect_faces_from_base64(image_base64: str) -> list[FaceDetectionResult]:
                     confidence=float(getattr(face, "det_score", 0)),
                 ),
                 embedding=embedding,
+                pose=_estimate_face_pose(face, image.shape),
             )
         )
 

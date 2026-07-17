@@ -43,6 +43,8 @@ import {
   downloadMonthlyReport,
 } from '@/lib/reports'
 import {
+  checkEmployeePublic,
+  detectFacePublic,
   markAttendancePublic,
   registerEmployeePublic,
 } from '@/lib/public'
@@ -119,6 +121,39 @@ function LoadingMessage({ children = 'Loading...' }) {
     <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
       <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
       <span>{children}</span>
+    </div>
+  )
+}
+
+function Modal({ open, title, children, onClose }) {
+  if (!open) {
+    return null
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+      <button
+        aria-label="Close modal overlay"
+        className="absolute inset-0 bg-slate-950/50"
+        onClick={onClose}
+        type="button"
+      />
+      <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Success</p>
+            <h2 className="mt-1 text-xl font-semibold text-slate-950">{title}</h2>
+          </div>
+          <button
+            className="rounded-full border border-slate-200 px-2 py-1 text-sm text-slate-500 transition hover:bg-slate-50"
+            onClick={onClose}
+            type="button"
+          >
+            Close
+          </button>
+        </div>
+        <div className="mt-4 text-sm leading-6 text-slate-600">{children}</div>
+      </div>
     </div>
   )
 }
@@ -259,11 +294,28 @@ function ProtectedRoute({ children }) {
 }
 
 function EmployeeRegisterPage() {
-  const captureMaxWidth = 480
+  const captureMaxWidth = 360
   const captureLabels = [
-    ['front', 'Front Face'],
-    ['left', 'Left Face'],
-    ['right', 'Right Face'],
+    ['front', 'Front'],
+    ['right', 'Right'],
+    ['left', 'Left'],
+  ]
+  const captureSteps = [
+    {
+      label: 'front',
+      prompt: 'Please place your face to the front side of the camera',
+      status: 'Please place your face to the front side of the camera',
+    },
+    {
+      label: 'right',
+      prompt: 'Please turn your face to right',
+      status: 'Please turn your face to right',
+    },
+    {
+      label: 'left',
+      prompt: 'Face data added. You can register below',
+      status: 'Face data added. You can register below',
+    },
   ]
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
@@ -278,8 +330,12 @@ function EmployeeRegisterPage() {
   const [capturedFaces, setCapturedFaces] = useState([])
   const [cameraStatus, setCameraStatus] = useState('Camera not started')
   const [cameraStream, setCameraStream] = useState(null)
+  const [captureStepIndex, setCaptureStepIndex] = useState(0)
   const [status, setStatus] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPoseChecking, setIsPoseChecking] = useState(false)
+
+  const currentCaptureStep = captureSteps[captureStepIndex] || null
 
   useEffect(() => {
     return () => {
@@ -294,6 +350,42 @@ function EmployeeRegisterPage() {
     }))
   }
 
+  function captureFrame() {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+
+    if (!video || !canvas || video.readyState < 2) {
+      return null
+    }
+
+    const scale = Math.min(captureMaxWidth / video.videoWidth, 1)
+    canvas.width = Math.round(video.videoWidth * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    return canvas.toDataURL('image/jpeg', 0.6)
+  }
+
+  function getExpectedOrientation(label) {
+    if (label === 'front') {
+      return 'front'
+    }
+
+    if (label === 'right') {
+      return 'right'
+    }
+
+    return 'left'
+  }
+
+  function getOrientationMessage(label, orientation, guidance) {
+    if (label === 'front') return 'Please place your face to the front side of the camera'
+    if (label === 'right') return 'Please turn your face to right'
+    if (label === 'left') return 'Face data added. You can register below'
+
+    return guidance || 'Please align your face before capturing'
+  }
+
   async function startCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -301,7 +393,8 @@ function EmployeeRegisterPage() {
         audio: false,
       })
       setCameraStream(stream)
-      setCameraStatus('Camera ready')
+      setCaptureStepIndex(0)
+      setCameraStatus('Camera ready. Please place your face to the front side of the camera.')
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream
@@ -313,36 +406,77 @@ function EmployeeRegisterPage() {
     }
   }
 
-  function captureFace(label) {
-    const video = videoRef.current
-    const canvas = canvasRef.current
+  async function captureFace(label) {
+    if (currentCaptureStep && label !== currentCaptureStep.label) {
+      const message = currentCaptureStep.prompt
+      setCameraStatus(message)
+      notify(message, 'error')
+      return
+    }
 
-    if (!video || !canvas || video.readyState < 2) {
+    const imageBase64 = captureFrame()
+
+    if (!imageBase64) {
       const message = 'Start the camera before capturing'
       setCameraStatus(message)
       notify(message, 'error')
       return
     }
 
-    const scale = Math.min(captureMaxWidth / video.videoWidth, 1)
-    canvas.width = Math.round(video.videoWidth * scale)
-    canvas.height = Math.round(video.videoHeight * scale)
-    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
+    setStatus('')
+    setIsPoseChecking(true)
 
-    const path = canvas.toDataURL('image/jpeg', 0.65)
-    const title = captureLabels.find((item) => item[0] === label)?.[1] || 'Face'
+    try {
+      const response = await detectFacePublic(imageBase64)
+      const detection = response.result?.detections?.[0]
+      const pose = detection?.pose
+      const expectedOrientation = getExpectedOrientation(label)
+      const facesDetected = response.result?.faces_detected || 0
 
-    setCapturedFaces((current) => [
-      ...current.filter((image) => image.label !== label),
-      {
-        label,
-        path,
-        capturedAt: new Date().toISOString(),
-      },
-    ])
-    const message = `${title} captured`
-    setCameraStatus(message)
-    notify(message)
+      if (facesDetected !== 1 || !detection || !pose) {
+        const message =
+          facesDetected === 0
+            ? 'No face detected. Please center your face in the camera.'
+            : 'Only one face should be visible during registration.'
+        setCameraStatus(message)
+        setStatus(message)
+        notify(message, 'error')
+        return
+      }
+
+      if (pose.orientation !== expectedOrientation) {
+        const message = getOrientationMessage(label, pose.orientation, pose.guidance)
+        setCameraStatus(message)
+        setStatus(message)
+        notify(message, 'error')
+        return
+      }
+
+      const title = captureLabels.find((item) => item[0] === label)?.[1] || 'Face'
+
+      setCapturedFaces((current) => [
+        ...current.filter((image) => image.label !== label),
+        {
+          label,
+          path: imageBase64,
+          capturedAt: new Date().toISOString(),
+        },
+      ])
+
+      const nextStep = captureSteps[captureStepIndex + 1]
+      const message = nextStep ? `${title} captured. ${nextStep.prompt}` : 'Face data added. You can register below'
+      setCameraStatus(message)
+      setStatus('')
+      setCaptureStepIndex((current) => Math.min(current + 1, captureSteps.length))
+      notify(message)
+    } catch (error) {
+      const message = error.response?.data?.message || 'Face pose check failed'
+      setCameraStatus(message)
+      setStatus(message)
+      notify(message, 'error')
+    } finally {
+      setIsPoseChecking(false)
+    }
   }
 
   async function handleSubmit(event) {
@@ -377,6 +511,8 @@ function EmployeeRegisterPage() {
         designation: '',
       })
       setCapturedFaces([])
+      setCaptureStepIndex(0)
+      setCameraStatus('Registration complete. Start the camera again for another employee.')
     } catch (error) {
       const message =
         error.response?.data?.message ||
@@ -427,8 +563,11 @@ function EmployeeRegisterPage() {
               <div>
                 <h2 className="text-sm font-semibold text-slate-900">Face Capture</h2>
                 <p className="mt-1 text-sm text-slate-600">{cameraStatus}</p>
+                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Step {Math.min(captureStepIndex + 1, captureSteps.length)} of {captureSteps.length}
+                </p>
               </div>
-              <Button onClick={startCamera} type="button" variant="outline">
+              <Button className="min-h-12 px-5 py-3" onClick={startCamera} type="button" variant="outline">
                 <Camera className="h-4 w-4" aria-hidden="true" />
                 Start Camera
               </Button>
@@ -441,19 +580,31 @@ function EmployeeRegisterPage() {
               ref={videoRef}
             />
             <canvas className="hidden" ref={canvasRef} />
+            {isPoseChecking && (
+              <div className="mt-4">
+                <LoadingMessage>Checking face pose...</LoadingMessage>
+              </div>
+            )}
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
               {captureLabels.map(([label, title]) => {
                 const image = capturedFaces.find((item) => item.label === label)
+                const isCurrentStep = currentCaptureStep?.label === label
+                const isComplete = captureSteps.findIndex((step) => step.label === label) < captureStepIndex
 
                 return (
                   <Button
+                    className="min-h-12 px-5 py-3 leading-tight text-center"
                     key={label}
+                    disabled={isPoseChecking || (!isCurrentStep && !isComplete)}
                     onClick={() => captureFace(label)}
                     type="button"
-                    variant={image ? 'default' : 'outline'}
+                    variant={image || isComplete ? 'default' : 'outline'}
                   >
+                    {isPoseChecking && isCurrentStep ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : null}
                     {image && <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-                    {image ? `Retake ${title}` : `Capture ${title}`}
+                    Capture {title}
                   </Button>
                 )
               })}
@@ -471,11 +622,17 @@ function EmployeeRegisterPage() {
 
 function PublicAttendancePage() {
   const videoRef = useRef(null)
+  const canvasRef = useRef(null)
   const [employeeCode, setEmployeeCode] = useState('')
+  const [verifiedEmployee, setVerifiedEmployee] = useState(null)
+  const [attendanceAction, setAttendanceAction] = useState('')
   const [cameraStream, setCameraStream] = useState(null)
   const [cameraStatus, setCameraStatus] = useState('Enter employee code to begin')
   const [status, setStatus] = useState('')
+  const [statusTone, setStatusTone] = useState('neutral')
+  const [isChecking, setIsChecking] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [attendanceSuccess, setAttendanceSuccess] = useState(null)
 
   useEffect(() => {
     return () => {
@@ -483,11 +640,67 @@ function PublicAttendancePage() {
     }
   }, [cameraStream])
 
-  async function startCamera() {
+  function stopCamera() {
+    cameraStream?.getTracks().forEach((track) => track.stop())
+    setCameraStream(null)
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+  }
+
+  function handleEmployeeCodeChange(event) {
+    setEmployeeCode(event.target.value.toUpperCase())
+    setVerifiedEmployee(null)
+    setAttendanceAction('')
+    setCameraStatus('Enter employee code to begin')
+    setStatus('')
+    setStatusTone('neutral')
+    setAttendanceSuccess(null)
+    stopCamera()
+  }
+
+  async function checkEmployeeCode() {
     if (!employeeCode.trim()) {
       const message = 'Employee code is required'
       setStatus(message)
-      notify(message, 'error')
+      setStatusTone('error')
+      return false
+    }
+
+    setIsChecking(true)
+    setStatus('')
+    setStatusTone('neutral')
+
+    try {
+      const result = await checkEmployeePublic(employeeCode.trim().toUpperCase())
+      setVerifiedEmployee(result.employee)
+      setAttendanceAction('')
+      setCameraStatus(`Employee verified: ${result.employee.fullName}`)
+      setStatus('')
+      setStatusTone('neutral')
+      return true
+    } catch (error) {
+      const message = error.response?.data?.message || 'Employee not found'
+      setVerifiedEmployee(null)
+      setCameraStatus('Enter employee code to begin')
+      setStatus(message)
+      setStatusTone('error')
+      return false
+    } finally {
+      setIsChecking(false)
+    }
+  }
+
+  async function startCamera() {
+    if (!verifiedEmployee) {
+      await checkEmployeeCode()
+      return false
+    }
+
+    if (!attendanceAction) {
+      const message = 'Select punch in or punch out'
+      setStatus(message)
+      setStatusTone('error')
       return false
     }
 
@@ -498,7 +711,7 @@ function PublicAttendancePage() {
       })
 
       setCameraStream(stream)
-      setCameraStatus(`Camera ready for ${employeeCode.trim().toUpperCase()}`)
+      setCameraStatus(`Camera ready for ${verifiedEmployee.employeeCode}`)
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream
@@ -508,36 +721,61 @@ function PublicAttendancePage() {
     } catch {
       const message = 'Camera access denied or unavailable'
       setCameraStatus(message)
-      notify(message, 'error')
+      setStatus(message)
+      setStatusTone('error')
       return false
     }
   }
 
   async function markAttendance() {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+
+    if (!video || !canvas || video.readyState < 2) {
+      const message = 'Camera is not ready'
+      setStatus(message)
+      setStatusTone('error')
+      return
+    }
+
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
+
     setIsSubmitting(true)
     setStatus('')
+    setStatusTone('neutral')
+    setAttendanceSuccess(null)
 
     try {
       const result = await markAttendancePublic({
-        employeeCode: employeeCode.trim().toUpperCase(),
+        employeeCode: verifiedEmployee.employeeCode,
+        action: attendanceAction,
+        imageBase64: canvas.toDataURL('image/jpeg', 0.75),
       })
+      const isDuplicate = ['duplicate', 'ignored'].includes(result.action)
       const timestamp = result.timestamp
         ? new Date(result.timestamp).toLocaleString()
         : new Date().toLocaleString()
-      const message = `${result.message} at ${timestamp}`
+      const message = isDuplicate ? result.message : `${result.message} at ${timestamp}`
       setStatus(message)
-      notify(message)
-      setEmployeeCode('')
-      setCameraStatus(message)
-      cameraStream?.getTracks().forEach((track) => track.stop())
-      setCameraStream(null)
-      if (videoRef.current) {
-        videoRef.current.srcObject = null
+      setStatusTone(isDuplicate ? 'error' : 'neutral')
+      if (attendanceAction === 'punch_in' && !isDuplicate) {
+        setAttendanceSuccess({
+          title: 'Punch In Successful',
+          message: result.message,
+          timestamp,
+        })
       }
+      setEmployeeCode('')
+      setVerifiedEmployee(null)
+      setAttendanceAction('')
+      setCameraStatus(message)
+      stopCamera()
     } catch (error) {
       const message = error.response?.data?.message || 'Attendance mark failed'
       setStatus(message)
-      notify(message, 'error')
+      setStatusTone('error')
     } finally {
       setIsSubmitting(false)
     }
@@ -545,6 +783,18 @@ function PublicAttendancePage() {
 
   async function handleSubmit(event) {
     event.preventDefault()
+
+    if (!verifiedEmployee) {
+      await checkEmployeeCode()
+      return
+    }
+
+    if (!attendanceAction) {
+      const message = 'Select punch in or punch out'
+      setStatus(message)
+      setStatusTone('error')
+      return
+    }
 
     if (!cameraStream) {
       await startCamera()
@@ -569,31 +819,75 @@ function PublicAttendancePage() {
             <span className="text-sm font-medium text-slate-700">Employee Code</span>
             <input
               className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
-              onChange={(event) => setEmployeeCode(event.target.value.toUpperCase())}
+              onChange={handleEmployeeCodeChange}
               required
               type="text"
               value={employeeCode}
             />
           </label>
-          <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-medium text-slate-900">Camera Capture</p>
-            <p className="mt-1 text-sm text-slate-600">{cameraStatus}</p>
-            <video
-              autoPlay
-              className="mt-4 aspect-video w-full rounded-md bg-slate-900 object-cover"
-              muted
-              playsInline
-              ref={videoRef}
-            />
-          </div>
-          {status && <div className="mt-4"><StatusMessage>{status}</StatusMessage></div>}
-          <Button className="mt-5 w-full" disabled={isSubmitting} type="submit">
-            {isSubmitting
-              ? 'Marking...'
-              : cameraStream
-                ? 'Mark Attendance'
-                : 'Start Camera'}
+          {verifiedEmployee && (
+            <>
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                {[
+                  ['punch_in', 'Punch In'],
+                  ['punch_out', 'Punch Out'],
+                ].map(([value, label]) => (
+                  <Button
+                    key={value}
+                    onClick={() => setAttendanceAction(value)}
+                    type="button"
+                    variant={attendanceAction === value ? 'default' : 'outline'}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+              <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-900">Camera Capture</p>
+                <p className="mt-1 text-sm text-slate-600">{cameraStatus}</p>
+                <video
+                  autoPlay
+                  className="mt-4 aspect-video w-full rounded-md bg-slate-900 object-cover"
+                  muted
+                  playsInline
+                  ref={videoRef}
+                />
+                <canvas className="hidden" ref={canvasRef} />
+              </div>
+            </>
+          )}
+          {status && <div className="mt-4"><StatusMessage tone={statusTone}>{status}</StatusMessage></div>}
+          {isSubmitting && (
+            <div className="mt-4">
+              <LoadingMessage>Checking face and marking attendance...</LoadingMessage>
+            </div>
+          )}
+          <Button className="mt-5 w-full" disabled={isChecking || isSubmitting} type="submit">
+            {isChecking
+              ? 'Checking...'
+              : isSubmitting
+                ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      Checking Face...
+                    </>
+                  )
+                : !verifiedEmployee
+                  ? 'Check Employee'
+                  : !attendanceAction
+                    ? 'Select Punch'
+                  : cameraStream
+                    ? `Mark ${attendanceAction === 'punch_in' ? 'Punch In' : 'Punch Out'}`
+                    : 'Start Camera'}
           </Button>
+          <Modal
+            open={Boolean(attendanceSuccess)}
+            title={attendanceSuccess?.title || 'Success'}
+            onClose={() => setAttendanceSuccess(null)}
+          >
+            <p>{attendanceSuccess?.message}</p>
+            <p className="mt-2 text-slate-500">{attendanceSuccess?.timestamp}</p>
+          </Modal>
         </form>
       </section>
     </main>

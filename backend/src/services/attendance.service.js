@@ -271,11 +271,18 @@ export async function markAttendanceForEmployee({
   cameraId = null,
   markedAt = new Date(),
   source = 'manual',
+  requestedAction = null,
 }) {
   assertObjectId(employeeId, 'employee id')
 
   if (cameraId) {
     assertObjectId(cameraId, 'camera id')
+  }
+
+  if (requestedAction && !['punch_in', 'punch_out'].includes(requestedAction)) {
+    const error = new Error('Invalid attendance action')
+    error.statusCode = 400
+    throw error
   }
 
   const employee = await Employee.findOne({ _id: employeeId, status: 'active' })
@@ -293,9 +300,15 @@ export async function markAttendanceForEmployee({
   })
 
   let action = 'ignored'
-  let message = 'Attendance already completed for today'
+  let message = 'you already marked your attendance.'
 
-  if (!attendance) {
+  if (requestedAction === 'punch_out' && !attendance) {
+    const error = new Error('Punch in is required before punch out')
+    error.statusCode = 400
+    throw error
+  }
+
+  if (!attendance && requestedAction !== 'punch_out') {
     attendance = await Attendance.create({
       employee: employee._id,
       date: day,
@@ -310,12 +323,12 @@ export async function markAttendanceForEmployee({
     })
     action = 'punch_in'
     message = 'Punch in recorded'
-  } else if (!attendance.punchOut) {
+  } else if (attendance && !attendance.punchOut && requestedAction !== 'punch_in') {
     const elapsedMinutes = calculateWorkingMinutes(attendance.punchIn, markedAt)
 
     if (elapsedMinutes < getPunchOutCooldownMinutes()) {
       action = 'duplicate'
-      message = 'Duplicate recognition ignored'
+      message = 'you already marked your attendance.'
     } else {
       attendance.punchOut = markedAt
       attendance.workingHoursMinutes = elapsedMinutes

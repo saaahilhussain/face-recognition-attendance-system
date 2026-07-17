@@ -22,9 +22,18 @@ class FaceBox(BaseModel):
     confidence: float
 
 
+class FacePose(BaseModel):
+    yaw: float
+    pitch: float
+    roll: float
+    orientation: str
+    guidance: str | None = None
+
+
 class FaceDetectionResult(BaseModel):
     box: FaceBox
     embedding: list[float] = Field(default_factory=list)
+    pose: FacePose | None = None
 
 
 class RecognitionMatch(BaseModel):
