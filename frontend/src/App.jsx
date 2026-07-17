@@ -24,11 +24,7 @@ import {
   registerAdmin,
 } from '@/lib/auth'
 import {
-  getEmployeeAttendanceHistory,
-  getAttendanceSummary,
-  getMonthlyAttendanceReport,
   listAttendance,
-  manualMarkAttendance,
 } from '@/lib/attendance'
 import {
   createCamera,
@@ -48,7 +44,6 @@ import {
   markAttendancePublic,
   registerEmployeePublic,
 } from '@/lib/public'
-import { socket } from '@/lib/socket'
 
 function notify(message, type = 'info') {
   window.dispatchEvent(
@@ -116,6 +111,25 @@ function StatusMessage({ children, tone = 'neutral' }) {
   return <p className={`rounded-md border px-3 py-2 text-sm ${styles}`}>{children}</p>
 }
 
+function StatusBadge({ children, tone = 'neutral' }) {
+  const styles = {
+    neutral: 'border-slate-200 bg-slate-50 text-slate-700',
+    success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    warning: 'border-amber-200 bg-amber-50 text-amber-700',
+    error: 'border-red-200 bg-red-50 text-red-700',
+  }
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+        styles[tone] || styles.neutral
+      }`}
+    >
+      {children}
+    </span>
+  )
+}
+
 function LoadingMessage({ children = 'Loading...' }) {
   return (
     <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
@@ -165,6 +179,15 @@ function EmptyState({ title, description }) {
       <p className="mt-1 text-slate-600">{description}</p>
     </div>
   )
+}
+
+function getDefaultAttendanceFilters() {
+  return {
+    from: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+      .toISOString()
+      .slice(0, 10),
+    to: new Date().toISOString().slice(0, 10),
+  }
 }
 
 function HomePage() {
@@ -1047,7 +1070,7 @@ function SessionPage() {
   return (
     <main className="min-h-screen bg-white px-6 py-10 text-slate-950">
       <section className="mx-auto max-w-3xl">
-        <Link className="text-sm font-medium text-emerald-700" to="/">
+        <Link className="text-sm font-medium text-emerald-700" to="/dashboard">
           Back
         </Link>
         <div className="mt-6 rounded-lg border border-slate-200 p-6">
@@ -1078,7 +1101,6 @@ function SessionPage() {
 
 function DashboardPage() {
   const [dashboard, setDashboard] = useState(null)
-  const [events, setEvents] = useState([])
   const [status, setStatus] = useState('Loading dashboard...')
 
   async function loadDashboard() {
@@ -1095,92 +1117,130 @@ function DashboardPage() {
 
   useEffect(() => {
     loadDashboard()
-
-    function addEvent(type, payload) {
-      setEvents((current) =>
-        [
-          {
-            id: `${type}-${Date.now()}`,
-            type,
-            payload,
-            timestamp: payload?.timestamp || new Date().toISOString(),
-          },
-          ...current,
-        ].slice(0, 8),
-      )
-    }
-
-    socket.connect()
-    socket.on('connect', () =>
-      addEvent('socket:connected', {
-        message: 'Realtime connection established',
-      }),
-    )
-    socket.on('disconnect', () =>
-      addEvent('socket:disconnected', {
-        message: 'Realtime connection closed',
-      }),
-    )
-    socket.on('attendance:marked', (payload) => addEvent('attendance:marked', payload))
-    socket.on('camera:connected', (payload) => addEvent('camera:connected', payload))
-    socket.on('camera:disconnected', (payload) =>
-      addEvent('camera:disconnected', payload),
-    )
-    socket.on('recognition:started', (payload) =>
-      addEvent('recognition:started', payload),
-    )
-    socket.on('recognition:success', (payload) =>
-      addEvent('recognition:success', payload),
-    )
-    socket.on('recognition:failed', (payload) =>
-      addEvent('recognition:failed', payload),
-    )
-    socket.on('employee:registered', (payload) =>
-      addEvent('employee:registered', payload),
-    )
-    socket.on('employee:face_registered', (payload) =>
-      addEvent('employee:face_registered', payload),
-    )
-
-    return () => {
-      socket.off('connect')
-      socket.off('disconnect')
-      socket.off('attendance:marked')
-      socket.off('camera:connected')
-      socket.off('camera:disconnected')
-      socket.off('recognition:started')
-      socket.off('recognition:success')
-      socket.off('recognition:failed')
-      socket.off('employee:registered')
-      socket.off('employee:face_registered')
-      socket.disconnect()
-    }
   }, [])
 
   const attendance = dashboard?.attendance
   const cameras = dashboard?.cameras
-  const attendanceTotal = Math.max(attendance?.totalEmployees || 0, 1)
-  const cameraTotal = Math.max(cameras?.total || 0, 1)
+  const registerRows = dashboard?.recentActivity || []
+
+  function formatDateTime(value) {
+    if (!value) return '-'
+    return new Date(value).toLocaleString()
+  }
+
+  function formatWorkingHours(minutes = 0) {
+    if (!minutes) return '-'
+
+    const hours = Math.floor(minutes / 60)
+    const remainingMinutes = minutes % 60
+
+    if (!hours) {
+      return `${remainingMinutes}m`
+    }
+
+    return `${hours}h ${remainingMinutes}m`
+  }
+
+  function getStatusTone(item) {
+    if (item.punchOut) return 'success'
+    if (item.punchIn) return 'warning'
+    return 'neutral'
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-950">
       <section className="mx-auto max-w-7xl">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <Link className="text-sm font-medium text-emerald-700" to="/">
+            <Link className="text-sm font-medium text-emerald-700" to="/dashboard">
               Back
             </Link>
             <h1 className="mt-4 text-3xl font-semibold">Dashboard</h1>
           </div>
-          <Button onClick={loadDashboard} variant="outline">
-            Refresh
-          </Button>
+          <div className="flex flex-wrap gap-2 md:justify-end">
+            <Button asChild className="md:ml-0" variant="outline">
+              <Link to="/attendance">
+                <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+                Check Attendance Report
+              </Link>
+            </Button>
+            <Button onClick={loadDashboard} variant="outline">
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {status && <div className="mt-6"><LoadingMessage>{status}</LoadingMessage></div>}
 
         {dashboard && (
           <>
+            <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Attendance Register</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Today's active attendance entries.
+                  </p>
+                </div>
+                <StatusBadge tone="neutral">{registerRows.length} records</StatusBadge>
+              </div>
+
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left text-sm">
+                  <thead className="border-b border-slate-200 text-slate-600">
+                    <tr>
+                      <th className="py-3 pr-4 font-medium">Employee Code</th>
+                      <th className="py-3 pr-4 font-medium">Employee</th>
+                      <th className="py-3 pr-4 font-medium">Department</th>
+                      <th className="py-3 pr-4 font-medium">Punch In</th>
+                      <th className="py-3 pr-4 font-medium">Punch Out</th>
+                      <th className="py-3 pr-4 font-medium">Working Hours</th>
+                      <th className="py-3 pr-4 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {registerRows.map((item) => (
+                      <tr key={item._id} className="align-top hover:bg-slate-50/70">
+                        <td className="py-4 pr-4 text-slate-600">
+                          {item.employee?.employeeCode || '-'}
+                        </td>
+                        <td className="py-4 pr-4">
+                          <p className="font-medium text-slate-950">
+                            {item.employee?.fullName || 'Unknown employee'}
+                          </p>
+                        </td>
+                        <td className="py-4 pr-4 text-slate-600">
+                          {item.employee?.department || '-'}
+                        </td>
+                        <td className="py-4 pr-4 text-slate-600">
+                          {formatDateTime(item.punchIn)}
+                        </td>
+                        <td className="py-4 pr-4 text-slate-600">
+                          {formatDateTime(item.punchOut)}
+                        </td>
+                        <td className="py-4 pr-4 text-slate-600">
+                          {formatWorkingHours(item.workingHoursMinutes)}
+                        </td>
+                        <td className="py-4 pr-4">
+                          <StatusBadge tone={getStatusTone(item)}>{item.status}</StatusBadge>
+                        </td>
+                      </tr>
+                    ))}
+                    {registerRows.length === 0 && (
+                      <tr>
+                        <td className="py-6" colSpan={7}>
+                          <EmptyState
+                            title="No attendance records yet"
+                            description="Attendance punches will appear here as a proper register."
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <div className="mt-6 grid gap-4 md:grid-cols-5">
               {[
                 ['Total Employees', attendance.totalEmployees],
@@ -1197,110 +1257,6 @@ function DashboardPage() {
                   <p className="mt-2 text-3xl font-semibold">{value}</p>
                 </div>
               ))}
-            </div>
-
-            <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_420px]">
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-semibold">Attendance Overview</h2>
-                <div className="mt-5 space-y-4">
-                  {[
-                    ['Present', attendance.present, 'bg-emerald-600'],
-                    ['Absent', attendance.absent, 'bg-red-500'],
-                    ['Completed', attendance.completed, 'bg-slate-900'],
-                  ].map(([label, value, color]) => (
-                    <div key={label}>
-                      <div className="mb-1 flex justify-between text-sm">
-                        <span>{label}</span>
-                        <span>{value}</span>
-                      </div>
-                      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className={`h-full ${color}`}
-                          style={{
-                            width: `${Math.min((value / attendanceTotal) * 100, 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-semibold">Camera Status</h2>
-                <div className="mt-5 space-y-4">
-                  {[
-                    ['Online', cameras.online, 'bg-emerald-600'],
-                    ['Offline', cameras.offline, 'bg-amber-500'],
-                    ['Disabled', cameras.disabled, 'bg-slate-400'],
-                  ].map(([label, value, color]) => (
-                    <div key={label}>
-                      <div className="mb-1 flex justify-between text-sm">
-                        <span>{label}</span>
-                        <span>{value}</span>
-                      </div>
-                      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className={`h-full ${color}`}
-                          style={{
-                            width: `${Math.min((value / cameraTotal) * 100, 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-6 lg:grid-cols-2">
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-semibold">Recent Attendance</h2>
-                <div className="mt-4 divide-y divide-slate-200">
-                  {dashboard.recentActivity.map((item) => (
-                    <div className="py-3" key={item._id}>
-                      <p className="font-medium">
-                        {item.employee?.fullName || 'Unknown employee'}
-                      </p>
-                      <p className="text-sm text-slate-600">
-                        {item.punchOut ? 'Punch Out' : 'Punch In'} -{' '}
-                        {new Date(item.updatedAt).toLocaleString()}
-                      </p>
-                    </div>
-                  ))}
-                  {dashboard.recentActivity.length === 0 && (
-                    <EmptyState
-                      title="No activity yet"
-                      description="Attendance events will appear here after employees punch in or out."
-                    />
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-semibold">Live Activity</h2>
-                <div className="mt-4 divide-y divide-slate-200">
-                  {events.map((event) => (
-                    <div className="py-3" key={event.id}>
-                      <p className="font-medium">{event.type}</p>
-                      <p className="text-sm text-slate-600">
-                        {event.payload?.message ||
-                          event.payload?.name ||
-                          'Realtime event received'}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {new Date(event.timestamp).toLocaleString()}
-                      </p>
-                    </div>
-                  ))}
-                  {events.length === 0 && (
-                    <EmptyState
-                      title="Waiting for live events"
-                      description="Socket.IO activity will appear here when the backend emits events."
-                    />
-                  )}
-                </div>
-              </div>
             </div>
           </>
         )}
@@ -1380,7 +1336,7 @@ function EmployeesPage() {
       <section className="mx-auto max-w-6xl">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <Link className="text-sm font-medium text-emerald-700" to="/">
+            <Link className="text-sm font-medium text-emerald-700" to="/dashboard">
               Back
             </Link>
             <h1 className="mt-4 text-3xl font-semibold">Employees</h1>
@@ -1475,41 +1431,36 @@ function EmployeesPage() {
 
 function AttendancePage() {
   const [items, setItems] = useState([])
-  const [summary, setSummary] = useState(null)
-  const [employeeId, setEmployeeId] = useState('')
-  const [historyEmployeeId, setHistoryEmployeeId] = useState('')
-  const [historyItems, setHistoryItems] = useState([])
-  const [monthlyReport, setMonthlyReport] = useState(null)
-  const [filters, setFilters] = useState({
-    date: '',
-    from: '',
-    to: '',
-    status: '',
-    department: '',
-  })
-  const [status, setStatus] = useState('')
+  const [filters, setFilters] = useState(getDefaultAttendanceFilters)
+  const [status, setStatus] = useState('Loading attendance report...')
 
-  async function loadAttendance(params = filters) {
-    setStatus('Loading attendance...')
+  function formatDateTime(value) {
+    if (!value) return '-'
+    return new Date(value).toLocaleString()
+  }
+
+  async function loadAttendanceReport(params = filters) {
+    setStatus('Loading attendance report...')
 
     try {
       const cleanParams = Object.fromEntries(
         Object.entries(params).filter(([, value]) => value),
       )
-      const [logs, summaryResult] = await Promise.all([
-        listAttendance(cleanParams),
-        getAttendanceSummary(cleanParams.date ? { date: cleanParams.date } : {}),
-      ])
-      setItems(logs.items)
-      setSummary(summaryResult.summary)
+
+      const response = await listAttendance(cleanParams)
+      setItems(
+        (response.items || []).filter(
+          (item) => item.employee?.fullName || item.employee?.employeeCode,
+        ),
+      )
       setStatus('')
     } catch (error) {
-      setStatus(error.response?.data?.message || 'Login required to view attendance')
+      setStatus(error.response?.data?.message || 'Login required to view attendance report')
     }
   }
 
   useEffect(() => {
-    loadAttendance()
+    loadAttendanceReport(getDefaultAttendanceFilters())
   }, [])
 
   function updateFilter(event) {
@@ -1521,53 +1472,7 @@ function AttendancePage() {
 
   async function handleFilter(event) {
     event.preventDefault()
-    await loadAttendance(filters)
-  }
-
-  async function loadHistory(event) {
-    event.preventDefault()
-
-    try {
-      const data = await getEmployeeAttendanceHistory(historyEmployeeId, {
-        from: filters.from,
-        to: filters.to,
-      })
-      setHistoryItems(data.items)
-      setStatus('')
-    } catch (error) {
-      setStatus(error.response?.data?.message || 'Attendance history failed')
-    }
-  }
-
-  async function loadMonthlyReport() {
-    const now = new Date()
-
-    try {
-      const data = await getMonthlyAttendanceReport({
-        year: now.getFullYear(),
-        month: now.getMonth() + 1,
-      })
-      setMonthlyReport(data.report)
-      setStatus('')
-    } catch (error) {
-      setStatus(error.response?.data?.message || 'Monthly report failed')
-    }
-  }
-
-  async function handleManualMark(event) {
-    event.preventDefault()
-
-    try {
-      const result = await manualMarkAttendance({ employeeId })
-      setStatus(result.message)
-      notify(result.message)
-      setEmployeeId('')
-      await loadAttendance()
-    } catch (error) {
-      const message = error.response?.data?.message || 'Attendance mark failed'
-      setStatus(message)
-      notify(message, 'error')
-    }
+    await loadAttendanceReport(filters)
   }
 
   return (
@@ -1575,46 +1480,23 @@ function AttendancePage() {
       <section className="mx-auto max-w-6xl">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <Link className="text-sm font-medium text-emerald-700" to="/">
+            <Link className="text-sm font-medium text-emerald-700" to="/dashboard">
               Back
             </Link>
-            <h1 className="mt-4 text-3xl font-semibold">Attendance</h1>
+            <h1 className="mt-4 text-3xl font-semibold">Attendance Report</h1>
+            <p className="mt-2 text-sm text-slate-600">
+              Filter attendance records by date range.
+            </p>
           </div>
-          <Button onClick={() => loadAttendance()} variant="outline">
+          <Button onClick={() => loadAttendanceReport(filters)} variant="outline">
             Refresh
           </Button>
         </div>
 
-        {summary && (
-          <div className="mt-6 grid gap-4 md:grid-cols-4">
-            {[
-              ['Total', summary.totalEmployees],
-              ['Present', summary.present],
-              ['Absent', summary.absent],
-              ['Pending Out', summary.pendingPunchOut],
-            ].map(([label, value]) => (
-              <div
-                className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-                key={label}
-              >
-                <p className="text-sm text-slate-600">{label}</p>
-                <p className="mt-2 text-3xl font-semibold">{value}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
         <form
-          className="mt-6 grid gap-3 rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-5"
+          className="mt-6 grid gap-3 rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-[1fr_1fr_auto]"
           onSubmit={handleFilter}
         >
-          <input
-            className="h-10 rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
-            name="date"
-            onChange={updateFilter}
-            type="date"
-            value={filters.date}
-          />
           <input
             className="h-10 rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
             name="from"
@@ -1629,147 +1511,68 @@ function AttendancePage() {
             type="date"
             value={filters.to}
           />
-          <select
-            className="h-10 rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
-            name="status"
-            onChange={updateFilter}
-            value={filters.status}
-          >
-            <option value="">All statuses</option>
-            <option value="present">Present</option>
-            <option value="late">Late</option>
-            <option value="half_day">Half Day</option>
-            <option value="pending">Pending</option>
-          </select>
-          <Button type="submit">Apply Filters</Button>
+          <Button type="submit">View Report</Button>
         </form>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[380px_1fr]">
-          <form
-            className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-            onSubmit={handleManualMark}
-          >
-            <h2 className="text-lg font-semibold">Manual Test Mark</h2>
-            <label className="mt-4 block">
-              <span className="text-sm font-medium text-slate-700">Employee ID</span>
-              <input
-                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
-                onChange={(event) => setEmployeeId(event.target.value)}
-                required
-                type="text"
-                value={employeeId}
-              />
-            </label>
-            <Button className="mt-5 w-full" type="submit">
-              Mark Punch
-            </Button>
-            {status && <div className="mt-4"><StatusMessage>{status}</StatusMessage></div>}
-          </form>
+        {status && <div className="mt-6"><StatusMessage>{status}</StatusMessage></div>}
 
-          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold">Recent Logs</h2>
-            <div className="mt-4 divide-y divide-slate-200">
-              {items.map((item) => (
-                <div
-                  className="flex flex-col gap-2 py-4 md:flex-row md:items-center md:justify-between"
-                  key={item._id}
-                >
-                  <div>
-                    <p className="font-medium">
-                      {item.employee?.fullName || item.employee}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      In: {item.punchIn ? new Date(item.punchIn).toLocaleString() : '-'}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Out:{' '}
-                      {item.punchOut ? new Date(item.punchOut).toLocaleString() : '-'}
-                    </p>
-                  </div>
-                  <span className="text-sm capitalize text-slate-600">
-                    {item.status}
-                  </span>
-                </div>
-              ))}
-              {!status && items.length === 0 && (
-                <EmptyState
-                  title="No attendance logs found"
-                  description="Attendance records will appear after a manual mark or recognition event."
-                />
-              )}
-            </div>
+        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Attendance Records</h2>
+            <StatusBadge tone="neutral">{items.length} rows</StatusBadge>
           </div>
-        </div>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <form
-            className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-            onSubmit={loadHistory}
-          >
-            <h2 className="text-lg font-semibold">Employee History</h2>
-            <label className="mt-4 block">
-              <span className="text-sm font-medium text-slate-700">Employee ID</span>
-              <input
-                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
-                onChange={(event) => setHistoryEmployeeId(event.target.value)}
-                required
-                type="text"
-                value={historyEmployeeId}
-              />
-            </label>
-            <Button className="mt-4" type="submit">
-              Load History
-            </Button>
-            <div className="mt-4 divide-y divide-slate-200">
-              {historyItems.map((item) => (
-                <div className="py-3 text-sm" key={item._id}>
-                  <p>{new Date(item.date).toLocaleDateString()}</p>
-                  <p className="text-slate-600">
-                    {item.punchIn ? new Date(item.punchIn).toLocaleTimeString() : '-'} /{' '}
-                    {item.punchOut ? new Date(item.punchOut).toLocaleTimeString() : '-'}
-                  </p>
-                </div>
-              ))}
-              {historyItems.length === 0 && (
-                <EmptyState
-                  title="No history loaded"
-                  description="Enter an employee ID and load history."
-                />
-              )}
-            </div>
-          </form>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold">Monthly Report</h2>
-              <Button onClick={loadMonthlyReport} type="button" variant="outline">
-                Generate
-              </Button>
-            </div>
-            {monthlyReport && (
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[560px] text-left text-sm">
-                  <thead className="border-b border-slate-200 text-slate-600">
-                    <tr>
-                      <th className="py-2">Employee</th>
-                      <th className="py-2">Present</th>
-                      <th className="py-2">Absent</th>
-                      <th className="py-2">Hours</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {monthlyReport.rows.map((row) => (
-                      <tr key={row.employee.id}>
-                        <td className="py-2">{row.employee.fullName}</td>
-                        <td className="py-2">{row.presentDays}</td>
-                        <td className="py-2">{row.absentDays}</td>
-                        <td className="py-2">{row.totalWorkingHours}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[1100px] text-left text-sm">
+              <thead className="border-b border-slate-200 text-slate-600">
+                <tr>
+                  <th className="py-2 pr-4 font-medium">Employee Code</th>
+                  <th className="py-2 pr-4 font-medium">Employee</th>
+                  <th className="py-2 pr-4 font-medium">Department</th>
+                  <th className="py-2 pr-4 font-medium">Date</th>
+                  <th className="py-2 pr-4 font-medium">Punch In</th>
+                  <th className="py-2 pr-4 font-medium">Punch Out</th>
+                  <th className="py-2 pr-4 font-medium">Working Hours</th>
+                  <th className="py-2 pr-4 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {items.map((item) => (
+                  <tr key={item._id} className="align-top">
+                    <td className="py-3 pr-4 text-slate-600">
+                      {item.employee?.employeeCode || '-'}
+                    </td>
+                    <td className="py-3 pr-4 font-medium text-slate-950">
+                      {item.employee?.fullName || item.employee || 'Unknown employee'}
+                    </td>
+                    <td className="py-3 pr-4 text-slate-600">
+                      {item.employee?.department || '-'}
+                    </td>
+                    <td className="py-3 pr-4 text-slate-600">{formatDateTime(item.date)}</td>
+                    <td className="py-3 pr-4 text-slate-600">{formatDateTime(item.punchIn)}</td>
+                    <td className="py-3 pr-4 text-slate-600">{formatDateTime(item.punchOut)}</td>
+                    <td className="py-3 pr-4 text-slate-600">
+                      {item.workingHoursMinutes ? `${item.workingHoursMinutes}m` : '-'}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <StatusBadge tone={item.status === 'present' ? 'success' : 'neutral'}>
+                        {item.status}
+                      </StatusBadge>
+                    </td>
+                  </tr>
+                ))}
+                {!items.length && (
+                  <tr>
+                    <td className="py-6" colSpan={8}>
+                      <EmptyState
+                        title="No attendance records"
+                        description="Pick a date range and view the report."
+                      />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -1863,7 +1666,7 @@ function CamerasPage() {
       <section className="mx-auto max-w-6xl">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <Link className="text-sm font-medium text-emerald-700" to="/">
+            <Link className="text-sm font-medium text-emerald-700" to="/dashboard">
               Back
             </Link>
             <h1 className="mt-4 text-3xl font-semibold">Cameras</h1>
@@ -2023,7 +1826,7 @@ function ReportsPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-950">
       <section className="mx-auto max-w-5xl">
-        <Link className="text-sm font-medium text-emerald-700" to="/">
+        <Link className="text-sm font-medium text-emerald-700" to="/dashboard">
           Back
         </Link>
         <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

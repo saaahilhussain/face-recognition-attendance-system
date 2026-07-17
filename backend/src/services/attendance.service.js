@@ -238,30 +238,75 @@ export async function getTodayAttendanceSummary(date = new Date()) {
   const dayStart = startOfDay(date)
   const dayEnd = endOfDay(date)
 
-  const [totalEmployees, present, completed, pendingPunchOut] = await Promise.all([
+  const [totalEmployees, counts] = await Promise.all([
     Employee.countDocuments({ status: 'active' }),
-    Attendance.countDocuments({
-      date: { $gte: dayStart, $lte: dayEnd },
-      punchIn: { $ne: null },
-    }),
-    Attendance.countDocuments({
-      date: { $gte: dayStart, $lte: dayEnd },
-      punchOut: { $ne: null },
-    }),
-    Attendance.countDocuments({
-      date: { $gte: dayStart, $lte: dayEnd },
-      punchIn: { $ne: null },
-      punchOut: null,
-    }),
+    Attendance.aggregate([
+      {
+        $match: {
+          date: { $gte: dayStart, $lte: dayEnd },
+        },
+      },
+      {
+        $lookup: {
+          from: Employee.collection.name,
+          localField: 'employee',
+          foreignField: '_id',
+          as: 'employeeDoc',
+        },
+      },
+      {
+        $unwind: '$employeeDoc',
+      },
+      {
+        $match: {
+          'employeeDoc.status': 'active',
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          present: {
+            $sum: {
+              $cond: [{ $ne: ['$punchIn', null] }, 1, 0],
+            },
+          },
+          completed: {
+            $sum: {
+              $cond: [{ $ne: ['$punchOut', null] }, 1, 0],
+            },
+          },
+          pendingPunchOut: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ['$punchIn', null] },
+                    { $eq: ['$punchOut', null] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]),
   ])
+
+  const summary = counts[0] || {
+    present: 0,
+    completed: 0,
+    pendingPunchOut: 0,
+  }
 
   return {
     date: dayStart,
     totalEmployees,
-    present,
-    absent: Math.max(totalEmployees - present, 0),
-    completed,
-    pendingPunchOut,
+    present: summary.present,
+    absent: Math.max(totalEmployees - summary.present, 0),
+    completed: summary.completed,
+    pendingPunchOut: summary.pendingPunchOut,
   }
 }
 
