@@ -70,6 +70,20 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
+If you are running the commands in bash or Git Bash on Windows, activate the virtual environment with:
+
+```bash
+source .venv/Scripts/activate
+```
+
+If you want to skip activation, use the venv Python directly:
+
+```bash
+./.venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000
+```
+
+The default AI service install includes InsightFace, so the recognition endpoints should be available after the dependencies are installed.
+
 Health check:
 
 ```powershell

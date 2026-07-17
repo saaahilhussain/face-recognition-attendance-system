@@ -96,7 +96,7 @@ describe('public backend routes', () => {
 
     assert.equal(response.status, 400)
     assert.equal(body.status, 'failed')
-    assert.ok(body.errors.includes('employeeId is required'))
+    assert.ok(body.errors.includes('employeeCode or employeeId is required'))
   })
 })
 

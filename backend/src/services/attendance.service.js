@@ -62,6 +62,18 @@ function serializeAttendance(attendance, employee) {
   }
 }
 
+function getAttendanceEventTimestamp(attendance, action, fallback = new Date()) {
+  if (action === 'punch_in' && attendance.punchIn) {
+    return attendance.punchIn
+  }
+
+  if (action === 'punch_out' && attendance.punchOut) {
+    return attendance.punchOut
+  }
+
+  return fallback
+}
+
 export async function listAttendance(query) {
   const filter = {}
 
@@ -320,7 +332,7 @@ export async function markAttendanceForEmployee({
     action,
     message,
     attendance: serializeAttendance(attendance, employee),
-    timestamp: new Date().toISOString(),
+    timestamp: getAttendanceEventTimestamp(attendance, action).toISOString(),
   }
 
   if (action !== 'duplicate' && action !== 'ignored') {

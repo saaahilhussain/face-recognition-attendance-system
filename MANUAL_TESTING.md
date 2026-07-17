@@ -87,7 +87,7 @@ Test in this order:
 
 1. Open `/` and confirm public landing page links are visible
 2. Register a public employee from `/employee-register`
-3. Mark public attendance from `/mark-attendance` using the new employee ID
+3. Mark public attendance from `/mark-attendance` using the new employee code
 4. Register/Login Admin from `/admin-register` and `/login`
 5. Confirm `/dashboard`, `/employees`, `/attendance`, `/cameras`, `/reports`, `/session`, and `/health` redirect to `/login` when logged out
 6. Create Employee from the admin console
@@ -114,6 +114,20 @@ python -m venv .venv
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
+
+If you are in bash or Git Bash on Windows, use:
+
+```bash
+source .venv/Scripts/activate
+```
+
+If activation is skipped, start the API with the venv Python directly:
+
+```bash
+./.venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000
+```
+
+The base AI service should start with the default requirements, and face recognition should be available once the dependencies are installed.
 
 Then check:
 

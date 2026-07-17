@@ -1,5 +1,5 @@
 import { markAttendanceForEmployee } from '../services/attendance.service.js'
-import { createEmployee } from '../services/employee.service.js'
+import { createEmployee, getEmployeeByCode } from '../services/employee.service.js'
 
 const imageLabels = ['front', 'left', 'right', 'other']
 
@@ -62,15 +62,25 @@ export async function registerEmployee(req, res) {
 
 export async function markAttendance(req, res) {
   try {
-    if (!req.body.employeeId) {
+    const employeeCode = String(req.body.employeeCode || '').trim()
+    const employeeId = String(req.body.employeeId || '').trim()
+
+    if (!employeeCode && !employeeId) {
       return res.status(400).json({
         status: 'failed',
-        errors: ['employeeId is required'],
+        errors: ['employeeCode or employeeId is required'],
       })
     }
 
+    let resolvedEmployeeId = employeeId
+
+    if (employeeCode) {
+      const employee = await getEmployeeByCode(employeeCode)
+      resolvedEmployeeId = employee._id.toString()
+    }
+
     const result = await markAttendanceForEmployee({
-      employeeId: req.body.employeeId,
+      employeeId: resolvedEmployeeId,
       source: 'public',
     })
 

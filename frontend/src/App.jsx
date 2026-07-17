@@ -259,6 +259,7 @@ function ProtectedRoute({ children }) {
 }
 
 function EmployeeRegisterPage() {
+  const captureMaxWidth = 480
   const captureLabels = [
     ['front', 'Front Face'],
     ['left', 'Left Face'],
@@ -317,15 +318,18 @@ function EmployeeRegisterPage() {
     const canvas = canvasRef.current
 
     if (!video || !canvas || video.readyState < 2) {
-      setCameraStatus('Start the camera before capturing')
+      const message = 'Start the camera before capturing'
+      setCameraStatus(message)
+      notify(message, 'error')
       return
     }
 
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
+    const scale = Math.min(captureMaxWidth / video.videoWidth, 1)
+    canvas.width = Math.round(video.videoWidth * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
 
-    const path = canvas.toDataURL('image/jpeg', 0.8)
+    const path = canvas.toDataURL('image/jpeg', 0.65)
     const title = captureLabels.find((item) => item[0] === label)?.[1] || 'Face'
 
     setCapturedFaces((current) => [
@@ -336,7 +340,9 @@ function EmployeeRegisterPage() {
         capturedAt: new Date().toISOString(),
       },
     ])
-    setCameraStatus(`${title} captured`)
+    const message = `${title} captured`
+    setCameraStatus(message)
+    notify(message)
   }
 
   async function handleSubmit(event) {
@@ -446,7 +452,8 @@ function EmployeeRegisterPage() {
                     type="button"
                     variant={image ? 'default' : 'outline'}
                   >
-                    {image ? 'Retake' : 'Capture'} {title}
+                    {image && <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+                    {image ? `Retake ${title}` : `Capture ${title}`}
                   </Button>
                 )
               })}
@@ -463,20 +470,70 @@ function EmployeeRegisterPage() {
 }
 
 function PublicAttendancePage() {
-  const [employeeId, setEmployeeId] = useState('')
+  const videoRef = useRef(null)
+  const [employeeCode, setEmployeeCode] = useState('')
+  const [cameraStream, setCameraStream] = useState(null)
+  const [cameraStatus, setCameraStatus] = useState('Enter employee code to begin')
   const [status, setStatus] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  async function handleSubmit(event) {
-    event.preventDefault()
+  useEffect(() => {
+    return () => {
+      cameraStream?.getTracks().forEach((track) => track.stop())
+    }
+  }, [cameraStream])
+
+  async function startCamera() {
+    if (!employeeCode.trim()) {
+      const message = 'Employee code is required'
+      setStatus(message)
+      notify(message, 'error')
+      return false
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false,
+      })
+
+      setCameraStream(stream)
+      setCameraStatus(`Camera ready for ${employeeCode.trim().toUpperCase()}`)
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+
+      return true
+    } catch {
+      const message = 'Camera access denied or unavailable'
+      setCameraStatus(message)
+      notify(message, 'error')
+      return false
+    }
+  }
+
+  async function markAttendance() {
     setIsSubmitting(true)
     setStatus('')
 
     try {
-      const result = await markAttendancePublic({ employeeId })
-      setStatus(result.message)
-      notify(result.message)
-      setEmployeeId('')
+      const result = await markAttendancePublic({
+        employeeCode: employeeCode.trim().toUpperCase(),
+      })
+      const timestamp = result.timestamp
+        ? new Date(result.timestamp).toLocaleString()
+        : new Date().toLocaleString()
+      const message = `${result.message} at ${timestamp}`
+      setStatus(message)
+      notify(message)
+      setEmployeeCode('')
+      setCameraStatus(message)
+      cameraStream?.getTracks().forEach((track) => track.stop())
+      setCameraStream(null)
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
+      }
     } catch (error) {
       const message = error.response?.data?.message || 'Attendance mark failed'
       setStatus(message)
@@ -484,6 +541,17 @@ function PublicAttendancePage() {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+
+    if (!cameraStream) {
+      await startCamera()
+      return
+    }
+
+    await markAttendance()
   }
 
   return (
@@ -498,18 +566,33 @@ function PublicAttendancePage() {
         >
           <h1 className="text-2xl font-semibold">Mark Your Attendance</h1>
           <label className="mt-6 block">
-            <span className="text-sm font-medium text-slate-700">Employee ID</span>
+            <span className="text-sm font-medium text-slate-700">Employee Code</span>
             <input
               className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-700"
-              onChange={(event) => setEmployeeId(event.target.value)}
+              onChange={(event) => setEmployeeCode(event.target.value.toUpperCase())}
               required
               type="text"
-              value={employeeId}
+              value={employeeCode}
             />
           </label>
+          <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-medium text-slate-900">Camera Capture</p>
+            <p className="mt-1 text-sm text-slate-600">{cameraStatus}</p>
+            <video
+              autoPlay
+              className="mt-4 aspect-video w-full rounded-md bg-slate-900 object-cover"
+              muted
+              playsInline
+              ref={videoRef}
+            />
+          </div>
           {status && <div className="mt-4"><StatusMessage>{status}</StatusMessage></div>}
           <Button className="mt-5 w-full" disabled={isSubmitting} type="submit">
-            {isSubmitting ? 'Marking...' : 'Mark Attendance'}
+            {isSubmitting
+              ? 'Marking...'
+              : cameraStream
+                ? 'Mark Attendance'
+                : 'Start Camera'}
           </Button>
         </form>
       </section>

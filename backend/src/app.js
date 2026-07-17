@@ -16,6 +16,7 @@ import reportRoutes from './routes/report.routes.js'
 dotenv.config()
 
 const app = express()
+const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '100mb'
 
 app.use(
   cors({
@@ -23,7 +24,8 @@ app.use(
     credentials: true,
   }),
 )
-app.use(express.json())
+app.use(express.json({ limit: requestBodyLimit }))
+app.use(express.urlencoded({ extended: true, limit: requestBodyLimit }))
 
 app.use('/auth', authRoutes)
 app.use('/public', publicRoutes)

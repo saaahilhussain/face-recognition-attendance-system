@@ -94,6 +94,26 @@ export async function getEmployeeById(id) {
   return employee
 }
 
+export async function getEmployeeByCode(employeeCode) {
+  const normalizedCode = String(employeeCode || '').trim().toUpperCase()
+
+  if (!normalizedCode) {
+    const error = new Error('Employee code is required')
+    error.statusCode = 400
+    throw error
+  }
+
+  const employee = await Employee.findOne({ employeeCode: normalizedCode })
+
+  if (!employee) {
+    const error = new Error('Employee not found')
+    error.statusCode = 404
+    throw error
+  }
+
+  return employee
+}
+
 export async function updateEmployee(id, payload) {
   assertObjectId(id)
 
